@@ -2,8 +2,8 @@
 
 API local para analizar y pronosticar demanda bibliotecaria. El pipeline usa
 SQLAlchemy con PostgreSQL en solo lectura y entrena un MLPRegressor global.
-Los resultados actuales están etiquetados como demostrativos porque la cohorte
-disponible es sintética.
+El pipeline procesa todas las reservas válidas de libros físicos existentes
+(activas y devueltas), excluye las canceladas y no depende de etiquetas demo.
 
 ## Preparar el entorno
 
@@ -27,13 +27,13 @@ bibliotecas utilizadas para cargar y ejecutar el modelo.
 python -m app.services.pipeline
 ```
 
-El pipeline lee únicamente los datos necesarios, utiliza reservas de usuarios
-`demo_user_` y libros marcados `[DEMO-LECTIO]` en su descripción, y escribe
-resultados sin nombres, correos ni contraseñas en `data/processed/`,
-`data/models/` y `data/reports/`. Los datos procesados e informes se excluyen de
-Git; solo `data/models/demand_model.joblib` se incluye como modelo inicial de
-despliegue. Si la historia no alcanza los mínimos de entrenamiento, el pipeline
-informa el problema y no crea un modelo.
+El pipeline lee únicamente los datos necesarios, incluye reservas activas y
+devueltas asociadas a libros físicos existentes, excluye reservas canceladas,
+inválidas o duplicadas, y escribe resultados agregados sin datos personales en
+`data/processed/`, `data/models/` y `data/reports/`. Los datos procesados e
+informes se excluyen de Git; solo `data/models/demand_model.joblib` se incluye
+como modelo inicial de despliegue. Si la historia no alcanza los mínimos de
+entrenamiento, el pipeline informa el problema y no crea un modelo.
 
 ## Iniciar la API
 
@@ -82,9 +82,10 @@ Python 3.14.2, scikit-learn 1.9.1, NumPy 2.5.4 y joblib 1.6.0; esas versiones
 están fijadas para cargar el artefacto de forma reproducible. El archivo
 serializado no contiene un manifiesto de versiones que permita verificar de
 forma independiente las versiones exactas usadas durante su entrenamiento.
-El modelo incluye historial y metadatos de catálogo (101 libros: 100 marcados
-como demo y uno no demo); antes de hacer público el repositorio, confirma que
-ese registro de catálogo se pueda compartir.
+El modelo local actualizado se entrenó con reservas válidas de Neon y conserva
+IDs de libros, categorías y métricas de inventario junto con el historial
+agregado. Confirma la autorización para compartir ese artefacto antes de
+incluirlo en un repositorio público.
 
 Railway `railway.json`/`railway.toml` Config as Code está en proceso de
 descontinuación para servicios nuevos. El `Procfile` y la configuración del

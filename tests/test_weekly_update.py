@@ -48,12 +48,11 @@ def build_bundle(prediction=0.5):
             "total_reservations": 12,
             "active_weeks": 12,
             "sufficient_history": True,
-            "is_demo": True,
         }
     ]
     return {
         "pipeline": ConstantPipeline(prediction),
-        "data_type": "sintetico_demostrativo",
+        "data_type": "datos_reales",
         "history": history,
         "book_history": book_history,
         "training_samples": 20,
@@ -69,7 +68,7 @@ def build_pipeline_result(output_root, candidate=None, metrics=None):
     (output_root / "processed").mkdir(parents=True, exist_ok=True)
     joblib.dump(candidate or build_bundle(), output_root / "models" / MODEL_FILENAME)
     (output_root / "reports" / "analytics.json").write_text(
-        json.dumps({"data_type": "sintetico_demostrativo"}),
+        json.dumps({"data_type": "datos_reales"}),
         encoding="utf-8",
     )
     (output_root / "processed" / "weekly_demand.csv").write_text(
@@ -85,7 +84,7 @@ def build_pipeline_result(output_root, candidate=None, metrics=None):
     return {
         "preparation": {
             "source_reservations": 32,
-            "demo_books": 1,
+            "books_total": 1,
         },
         "evaluation": evaluation,
     }

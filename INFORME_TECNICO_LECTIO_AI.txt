@@ -1,0 +1,135 @@
+INFORME TÉCNICO FINAL — LECTIO-AI, ETAPAS 3 A 8
+Fecha: 2026-11-09
+
+ALCANCE Y ESTADO GENERAL
+Este informe se elaboró inspeccionando el código, los artefactos existentes y las salidas de prueba de la sesión. Para prepararlo no se volvió a entrenar el modelo ni se consultó o escribió Neon.
+
+Las etapas 3 a 8 cuentan con implementación local y con ejecución registrada del pipeline y de la API. Los resultados disponibles corresponden a datos sintéticos de demostración, no a transacciones reales. El MLPRegressor superó al baseline en la partición cronológica guardada, pero esto no prueba su rendimiento sobre datos reales.
+
+1. PREPARACIÓN DE DATOS
+- Reservas consultadas: 981.
+- Reservas sintéticas válidas usadas: 980.
+- Libros en el catálogo: 101.
+- Libros demo analizados: 100.
+- Libros demo con historial suficiente para entrenar: 45.
+- Libros demo con historial insuficiente: 55.
+- Periodo histórico: 2025-12-01 a 2026-11-02.
+- Frecuencia: semanal, 49 semanas.
+- Promedio: 20 reservas demo por semana.
+- Panel: 100 libros demo por 49 semanas = 4.900 libro-semanas; 856 con demanda y 4.044 con demanda cero.
+
+Identificación sintética: reserva asociada a usuario cuyo username comienza por demo_user_; correo @demo.lectio.local se usa como criterio alternativo. Libro demo identificado por [DEMO-LECTIO] en libros_fisicos.descripcion. Cada reserva se cuenta una sola vez en cualquier estado (ACTIVA, DEVUELTA, CANCELADA).
+
+Exclusiones registradas:
+- 1 reserva no sintética excluida.
+- 0 duplicados, IDs inválidos, fechas inválidas, estados inválidos o referencias a libros desconocidos eliminadas.
+- 0 reservas sintéticas enlazadas a libros no demo.
+- 1 libro no demo excluido del entrenamiento.
+
+Se eligió frecuencia semanal para reducir la dispersión diaria (980 eventos en 49 semanas). El horizonte de 30 días se proyecta en cuatro semanas y dos días de una quinta. Los lags y ventanas se desplazan para evitar fuga de información futura.
+
+2. ANÁLISIS EXPLORATORIO
+- Demanda total demo: 980.
+- Tendencia descriptiva: la media semanal de la segunda mitad fue 52,97 % mayor que la primera; es una comparación descriptiva, no una prueba estadística.
+- Estacionalidad anual: NO DISPONIBLE; hay menos de dos años de historia.
+- Libros más demandados: d22d2ed0-cd37-42c1-84d0-24b47a4aa202 (30), 884b79a8-502f-4ff5-ad22-c33e2cfb37ee (30), a0c52ec4-5954-44fc-a927-6334d47f9f2d (30).
+- Categorías: Novelas 247; Historia 162; Fantasía 154; Filosofía 150; Ciencia 134; Arte 133.
+- Gráficas en data/reports/: demand_over_time.png, top_books.png, demand_by_category.png, demand_distribution.png y period_comparison.png. Se verificó su generación/existencia, no la revisión visual individual de cada imagen.
+
+3. MODELO PREDICTIVO
+- Modelo: Pipeline Scikit-learn con OneHotEncoder para book_id/categoría, StandardScaler numérico y MLPRegressor global.
+- Arquitectura: una capa oculta (16); relu; adam; alpha=1.0; learning_rate_init=0.001; max_iter=1000; tol=0.001; random_state=42; early_stopping=False.
+- Variables: book_id, category, seno/coseno del mes, seno/coseno de semana del año, lags de 1/2/4 semanas, medias móviles de las 4/8 semanas anteriores y diferencia entre ambas.
+- Entrenamiento: 1.440 muestras; prueba: 405 muestras. División cronológica, train 2026-01-26 a 2026-08-31; test 2026-09-07 a 2026-11-02.
+- Modelo guardado en data/models/demand_model.joblib. Fecha guardada: 2026-11-09T05:31:57.525510+00:00.
+- Dataset semanal: data/processed/weekly_demand.csv.
+
+4. EVALUACIÓN
+                    MAE       RMSE
+MLPRegressor       0,5548    0,7496
+Baseline 4 semanas 0,5895    0,7994
+
+El MLP fue mejor en MAE y RMSE en la misma partición temporal. Se registraron 7 predicciones negativas crudas en evaluación; no se recortaron al calcular métricas. Para predicciones API sí se recortan a cero.
+
+Subconjunto de baja demanda (16 libros, 144 muestras): MLP MAE 0,4912/RMSE 0,6569; baseline MAE 0,5208/RMSE 0,6997. Resultados solo de datos sintéticos.
+
+5. PREDICCIONES Y RECOMENDACIONES
+- Horizonte 30 días; rango del modelo actual 2026-11-09 a 2026-12-09 (fin exclusivo).
+- Ejemplo: libro e47fee18-12c5-4583-943e-610a67e8fbfc, categoría Novelas, demanda prevista 2,53.
+- Ejemplo con insuficiencia: libro 974943b2-5f10-41d3-9736-cbf2adba3e43, Historia; pronóstico null, estado DATOS_INSUFICIENTES.
+- Clasificación: ALTO cuando demanda prevista > stock disponible; MEDIO cuando no lo supera, pero el margen de seguridad sí excede el stock; BAJO en otro caso. Sin historia suficiente, DATOS_INSUFICIENTES.
+- Margen predeterminado: 20 %, configurable con LECTIO_SAFETY_MARGIN.
+- Reposición: max(0, ceil(pronóstico_30_días * (1 + margen) - stock_disponible)). Las unidades reservadas se informan aparte; inventario total = stock + reservado.
+- Ejemplo: libro e47fee18-12c5-4583-943e-610a67e8fbfc: stock 1, reservado 2, total 3, pronóstico 2,53, riesgo ALTO, reposición 3.
+- Resultados de riesgo actuales: ALTO 45; MEDIO 0; BAJO 0; DATOS_INSUFICIENTES 56 (55 demo sin historial suficiente y un libro no demo).
+- Recomendaciones orientativas; no alteran inventario ni compran automáticamente.
+
+6. API FASTAPI
+Todos respondieron HTTP 200 en el smoke test registrado (rutas específicas con libro existente):
+GET / — información general.
+GET /health — salud.
+GET /database/status — conexión, esquema y agregados sin credenciales/datos personales.
+GET /model/status — estado, tipo de datos, fecha y métricas.
+GET /predictions — pronóstico de 30 días; limit validado.
+GET /predictions/{book_id} — pronóstico individual.
+GET /recommendations — riesgos y reposición; limit validado.
+GET /recommendations/{book_id} — recomendación individual.
+GET /metrics — métricas de evaluación y baseline.
+GET /analytics — reporte exploratorio persistido.
+También se verificaron /docs y /openapi.json.
+Swagger local: http://127.0.0.1:8000/docs
+
+7. PRUEBAS
+Seis pruebas unitarias aprobadas:
+1) test_model_not_trained_status_and_prediction_error.
+2) test_all_statuses_count_once_and_zero_weeks_are_filled.
+3) test_duplicates_invalid_rows_and_non_demo_are_excluded.
+4) test_features_use_only_previous_periods_and_contain_no_personal_fields.
+5) test_recommendation_risk_and_replenishment_thresholds.
+6) test_train_evaluate_forecast_and_recommend_without_negative_demand.
+
+Además se registró smoke test HTTP para todas las rutas y Swagger, compilación de 17 archivos Python, pip check sin dependencias rotas, .env/artifacts excluidos de Git y transaction_read_only=on. No existe un log persistido en tests/; estos resultados constan en las salidas de ejecución de la sesión. Errores pendientes de esas ejecuciones: ninguno.
+
+8. ARCHIVOS
+Creados:
+app/services/data_preparation.py
+app/services/exploratory_analysis.py
+app/services/training.py
+app/services/prediction.py
+app/services/recommendation.py
+app/services/pipeline.py
+app/api/routes.py
+app/api/schemas.py
+tests/test_ml_pipeline.py
+README.md
+
+Modificados:
+main.py (router/lifespan), app/database/diagnostics.py (inspección e identificación demo), .gitignore (artefactos generados), requirements.txt (Matplotlib y versiones congeladas).
+
+Artefactos generados:
+data/processed/weekly_demand.csv
+data/models/demand_model.joblib
+data/reports/preparation.json
+data/reports/analytics.json
+data/reports/evaluation.json
+data/reports/demand_over_time.png
+data/reports/top_books.png
+data/reports/demand_by_category.png
+data/reports/demand_distribution.png
+data/reports/period_comparison.png
+
+Los directorios data/processed/, data/models/ y data/reports/ están excluidos de Git.
+
+9. ESTADO DEL PROYECTO
+Implementado y ejecutado: preparación, análisis, modelo global, evaluación, forecast, recomendaciones y API independiente. Probado: seis unit tests y HTTP smoke test de endpoints/Swagger; lectura de Neon en solo lectura.
+
+Limitaciones: solo datos sintéticos; historial menor de dos años; 55 libros demo no entrenables; evaluación con una partición temporal. Las métricas no prueban rendimiento en demanda real.
+
+Pendiente para despliegue/Java: definir arquitectura de despliegue, gestión de secretos, rol PostgreSQL realmente restringido a lectura, observabilidad, pruebas de carga/operación y contrato de integración con Spring Boot. No se hizo despliegue ni integración Java.
+
+COMANDOS (PowerShell desde la raíz)
+python -m app.services.pipeline
+uvicorn main:app --reload
+python -m unittest discover -s tests -v
+
+Ejecutar el pipeline vuelve a leer Neon y entrena; no hace falta para iniciar la API si ya están presentes los artefactos locales.

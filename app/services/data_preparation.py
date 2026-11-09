@@ -14,7 +14,8 @@ from app.database.diagnostics import (
     _quote_identifier,
 )
 
-ALLOWED_STATES = {"ACTIVA", "DEVUELTA", "CANCELADA"}
+ALLOWED_STATES = {"ACTIVA", "DEVUELTA"}
+CANCELLED_STATE = "CANCELADA"
 WEEKLY_FREQUENCY = "W-MON"
 MIN_BOOK_RESERVATIONS = 8
 MIN_BOOK_ACTIVE_WEEKS = 3
@@ -52,7 +53,6 @@ def load_source_data(session: Session) -> tuple[list[dict[str, Any]], list[dict[
     tables = _inspect_tables(session)
     books = _qualified_table(tables["libros_fisicos"], "libros_fisicos")
     reservations = _qualified_table(tables["reservas"], "reservas")
-    users = _qualified_table(tables["usuarios"], "usuarios")
 
     book_rows = session.execute(
         text(
@@ -60,12 +60,10 @@ def load_source_data(session: Session) -> tuple[list[dict[str, Any]], list[dict[
             SELECT {_quote_identifier('id')} AS book_id,
                    {_quote_identifier('categoria')} AS category,
                    {_quote_identifier('stock')} AS stock,
-                   {_quote_identifier('reservado')} AS reserved,
-                   ({_quote_identifier('descripcion')} ILIKE :demo_marker) AS is_demo
+                   {_quote_identifier('reservado')} AS reserved
             FROM {books}
             """
-        ),
-        {"demo_marker": "%[DEMO-LECTIO]%"},
+        )
     ).mappings()
 
     reservation_rows = session.execute(
@@ -74,21 +72,10 @@ def load_source_data(session: Session) -> tuple[list[dict[str, Any]], list[dict[
             SELECT r.{_quote_identifier('id')} AS reservation_id,
                    r.{_quote_identifier('libro_fisico_id')} AS book_id,
                    r.{_quote_identifier('fecha_creacion')} AS created_at,
-                   upper(trim(r.{_quote_identifier('estado')})) AS state,
-                   (
-                       coalesce(u.{_quote_identifier('username')} LIKE :username_prefix, false)
-                       OR lower(trim(coalesce(r.{_quote_identifier('correo')}, '')))
-                           LIKE :email_suffix
-                   ) AS is_synthetic
+                   upper(trim(r.{_quote_identifier('estado')})) AS state
             FROM {reservations} AS r
-            LEFT JOIN {users} AS u
-                ON u.{_quote_identifier('id')} = r.{_quote_identifier('usuario_id')}
             """
-        ),
-        {
-            "username_prefix": "demo_user_%",
-            "email_suffix": "%@demo.lectio.local",
-        },
+        )
     ).mappings()
 
     return [dict(row) for row in book_rows], [dict(row) for row in reservation_rows]
@@ -100,14 +87,13 @@ def _week_start(values: pd.Series) -> pd.Series:
 
 def _build_panel(events: pd.DataFrame, catalog: pd.DataFrame) -> pd.DataFrame:
     if events.empty:
-        raise InsufficientDataError("No hay reservas demostrativas válidas para preparar.")
+        raise InsufficientDataError("No hay reservas válidas para preparar.")
 
     first_week = events["created_at"].min().to_period("W-SUN").start_time
     last_week = events["created_at"].max().to_period("W-SUN").start_time
     periods = pd.date_range(first_week, last_week, freq=WEEKLY_FREQUENCY)
-    demo_catalog = catalog.loc[catalog["is_demo"]].copy()
-    if demo_catalog.empty:
-        raise InsufficientDataError("No se encontraron libros demostrativos.")
+    if catalog.empty:
+        raise InsufficientDataError("No se encontraron libros físicos válidos.")
 
     observed = (
         events.assign(period_start=_week_start(events["created_at"]))
@@ -116,7 +102,7 @@ def _build_panel(events: pd.DataFrame, catalog: pd.DataFrame) -> pd.DataFrame:
         .rename(columns={"size": "demand"})
     )
     index = pd.MultiIndex.from_product(
-        [demo_catalog["book_id"].tolist(), periods],
+        [catalog["book_id"].tolist(), periods],
         names=["book_id", "period_start"],
     )
     panel = (
@@ -126,7 +112,7 @@ def _build_panel(events: pd.DataFrame, catalog: pd.DataFrame) -> pd.DataFrame:
     )
     panel["demand"] = panel["demand"].astype("int64")
     panel = panel.merge(
-        demo_catalog[["book_id", "category"]],
+        catalog[["book_id", "category"]],
         on="book_id",
         how="left",
         validate="many_to_one",
@@ -165,13 +151,12 @@ def prepare_data(
 ) -> PreparedData:
     books = pd.DataFrame(book_records)
     reservations = pd.DataFrame(reservation_records)
-    required_book_fields = {"book_id", "category", "stock", "reserved", "is_demo"}
+    required_book_fields = {"book_id", "category", "stock", "reserved"}
     required_reservation_fields = {
         "reservation_id",
         "book_id",
         "created_at",
         "state",
-        "is_synthetic",
     }
     if not required_book_fields.issubset(books.columns):
         raise ValueError("El catálogo no contiene las columnas requeridas.")
@@ -190,7 +175,6 @@ def prepare_data(
     books = books.loc[(books["stock"] >= 0) & (books["reserved"] >= 0)].copy()
     books["stock"] = books["stock"].astype(int)
     books["reserved"] = books["reserved"].astype(int)
-    books["is_demo"] = books["is_demo"].fillna(False).astype(bool)
     books["category"] = books["category"].astype(str)
 
     original_rows = len(reservations)
@@ -214,33 +198,27 @@ def prepare_data(
     invalid_date_mask = reservations["created_at"].isna()
     invalid_date_count = int(invalid_date_mask.sum())
     reservations = reservations.loc[~invalid_date_mask].copy()
+    cancelled_mask = reservations["state"].eq(CANCELLED_STATE)
+    cancelled_count = int(cancelled_mask.sum())
+    reservations = reservations.loc[~cancelled_mask].copy()
     invalid_state_mask = ~reservations["state"].isin(ALLOWED_STATES)
     invalid_state_count = int(invalid_state_mask.sum())
     reservations = reservations.loc[~invalid_state_mask].copy()
-    reservations["is_synthetic"] = reservations["is_synthetic"].fillna(False).astype(bool)
 
     catalog_ids = set(books["book_id"])
     unknown_book_mask = ~reservations["book_id"].isin(catalog_ids)
     unknown_book_count = int(unknown_book_mask.sum())
     reservations = reservations.loc[~unknown_book_mask].copy()
 
-    demo_ids = set(books.loc[books["is_demo"], "book_id"])
-    non_demo_reservations = int((~reservations["is_synthetic"]).sum())
-    non_demo_book_events = int(
-        (reservations["is_synthetic"] & ~reservations["book_id"].isin(demo_ids)).sum()
-    )
-    events = reservations.loc[
-        reservations["is_synthetic"] & reservations["book_id"].isin(demo_ids)
-    ].copy()
+    events = reservations.copy()
     if events.empty:
         raise InsufficientDataError(
-            "No se encontraron reservas demostrativas asociadas a libros demostrativos."
+            "No se encontraron reservas activas o devueltas asociadas a libros físicos."
         )
 
-    demo_catalog = books.loc[books["is_demo"]].copy()
-    panel = _build_panel(events, demo_catalog)
+    panel = _build_panel(events, books)
     event_details = events[["book_id", "created_at"]].merge(
-        demo_catalog[["book_id", "category"]],
+        books[["book_id", "category"]],
         on="book_id",
         how="left",
         validate="many_to_one",
@@ -255,7 +233,7 @@ def prepare_data(
         .reset_index()
     )
     all_books = books[
-        ["book_id", "category", "stock", "reserved", "is_demo"]
+        ["book_id", "category", "stock", "reserved"]
     ].merge(
         activity, on="book_id", how="left", validate="one_to_one"
     )
@@ -266,8 +244,7 @@ def prepare_data(
         all_books["stock"] + all_books["reserved"]
     )
     all_books["sufficient_history"] = (
-        all_books["is_demo"]
-        & (all_books["total_reservations"] >= MIN_BOOK_RESERVATIONS)
+        (all_books["total_reservations"] >= MIN_BOOK_RESERVATIONS)
         & (all_books["active_weeks"] >= MIN_BOOK_ACTIVE_WEEKS)
         & (len(panel["period_start"].unique()) >= MIN_HISTORY_WEEKS)
     )
@@ -281,12 +258,13 @@ def prepare_data(
         )
 
     report = {
-        "data_type": "sintetico_demostrativo",
+        "data_type": "datos_reales",
+        "data_source": "Neon PostgreSQL",
         "frequency": "semanal",
         "frequency_reason": (
-            f"{len(events)} solicitudes demostrativas en "
+            f"{len(events)} reservas válidas en "
             f"{panel['period_start'].nunique()} semanas para "
-            f"{len(demo_catalog)} libros; se usa frecuencia semanal para reducir la "
+            f"{len(books)} libros físicos; se usa frecuencia semanal para reducir la "
             "dispersión diaria. El horizonte de 30 días equivale a cuatro semanas "
             "completas y dos días de una quinta semana."
         ),
@@ -294,21 +272,17 @@ def prepare_data(
             len(events) / panel["period_start"].nunique(), 2
         ),
         "source_reservations": original_rows,
-        "valid_demo_reservations": int(len(events)),
+        "valid_reservations": int(len(events)),
+        "cancelled_reservations_excluded": cancelled_count,
         "duplicate_reservations_removed": duplicate_count,
         "invalid_id_reservations_removed": invalid_id_count,
         "invalid_date_reservations_removed": invalid_date_count,
         "invalid_state_reservations_removed": invalid_state_count,
         "unknown_book_reservations_removed": unknown_book_count,
-        "non_synthetic_reservations_excluded": non_demo_reservations,
-        "demo_reservations_linked_to_non_demo_books_excluded": non_demo_book_events,
         "books_total": int(len(books)),
-        "demo_books": int(len(demo_catalog)),
-        "non_demo_books_excluded_from_training": int((~books["is_demo"]).sum()),
-        "eligible_demo_books": int(len(eligible_ids)),
-        "insufficient_history_demo_books": int(
-            len(demo_catalog)
-            - all_books.loc[all_books["is_demo"], "sufficient_history"].sum()
+        "eligible_books": int(len(eligible_ids)),
+        "insufficient_history_books": int(
+            (~all_books["sufficient_history"]).sum()
         ),
         "first_period": panel["period_start"].min().date().isoformat(),
         "last_period": panel["period_start"].max().date().isoformat(),

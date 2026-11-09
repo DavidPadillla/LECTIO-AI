@@ -1,0 +1,469 @@
+LECTIO-AI — INFORME DE ENDPOINTS DE LA API REST
+
+Fuente: app/api/routes.py, app/api/schemas.py y handlers ejecutados con el
+modelo e informes locales disponibles.
+
+Los ejemplos son respuestas obtenidas localmente del modelo/reportes guardados.
+No se consultó ni escribió en Neon. Los identificadores UUID de libros fueron
+anonimizados como "book-demo-001". Las listas se reducen a un elemento
+representativo; los nombres de campos y tipos corresponden a la respuesta real.
+
+========================================================================
+1. GET /health
+========================================================================
+
+Parámetros: ninguno.
+
+Ejemplo JSON:
+{
+  "status": "ok"
+}
+
+Campos:
+- status: string
+
+========================================================================
+2. GET /model/status
+========================================================================
+
+Parámetros: ninguno.
+
+Ejemplo JSON:
+{
+  "trained": true,
+  "trained_at": "2026-11-09T05:31:57.525510+00:00",
+  "metrics_available": true,
+  "training_samples": 1845,
+  "data_type": "sintetico_demostrativo",
+  "model_type": "MLPRegressor",
+  "metrics": {
+    "evaluation_type": "cronologica",
+    "train_start": "2026-01-26",
+    "train_end": "2026-08-31",
+    "test_start": "2026-09-07",
+    "test_end": "2026-11-02",
+    "train_samples": 1440,
+    "test_samples": 405,
+    "mlp_regressor": {
+      "mae": 0.5547547783343703,
+      "rmse": 0.7495999795563756
+    },
+    "baseline_rolling_4_mean": {
+      "mae": 0.5895061728395061,
+      "rmse": 0.7994017825077344
+    },
+    "mlp_raw_negative_predictions": 7,
+    "mlp_better_than_baseline_mae": true,
+    "mlp_better_than_baseline_rmse": true,
+    "low_demand_evaluation": {
+      "books": 16,
+      "test_samples": 144,
+      "mlp_regressor": {
+        "mae": 0.49120301216332746,
+        "rmse": 0.656923601491736
+      },
+      "baseline_rolling_4_mean": {
+        "mae": 0.5208333333333334,
+        "rmse": 0.699702317656111
+      }
+    },
+    "per_book_errors": [
+      {
+        "book_id": "book-demo-001",
+        "test_periods": 9,
+        "mlp_mae": 0.37360878634292344,
+        "baseline_mae": 0.4166666666666667
+      }
+    ],
+    "conclusion": "El MLPRegressor supera al modelo de referencia en MAE y RMSE."
+  }
+}
+
+Campos de nivel superior:
+- trained: boolean
+- trained_at: string o null
+- metrics_available: boolean
+- training_samples: integer o null
+- data_type: string o null
+- model_type: string o null
+- metrics: object o null
+
+Campos de metrics:
+- evaluation_type: string
+- train_start, train_end, test_start, test_end: string (fecha ISO)
+- train_samples, test_samples, mlp_raw_negative_predictions: integer
+- mlp_regressor: object con mae y rmse de tipo number
+- baseline_rolling_4_mean: object con mae y rmse de tipo number
+- mlp_better_than_baseline_mae: boolean
+- mlp_better_than_baseline_rmse: boolean
+- low_demand_evaluation: object con books y test_samples (integer), y
+  mlp_regressor/baseline_rolling_4_mean (objetos de métricas)
+- per_book_errors: array de objetos:
+  - book_id: string
+  - test_periods: integer
+  - mlp_mae: number
+  - baseline_mae: number
+- conclusion: string
+
+========================================================================
+3. GET /predictions
+========================================================================
+
+Parámetro:
+- limit: integer, opcional; predeterminado 200, mínimo 1 y máximo 500.
+
+Ejemplo JSON (limit=1):
+{
+  "data_type": "sintetico_demostrativo",
+  "horizon_days": 30,
+  "forecast_start": "2026-11-09",
+  "forecast_end_exclusive": "2026-12-09",
+  "books": [
+    {
+      "book_id": "book-demo-001",
+      "category": "Novelas",
+      "status": "PREDICCION_DISPONIBLE",
+      "forecast_demand_30_days": 2.53,
+      "weekly_forecast": [
+        {
+          "period_start": "2026-11-09",
+          "days_covered": 7,
+          "predicted_demand": 0.6262251789777671
+        },
+        {
+          "period_start": "2026-11-16",
+          "days_covered": 7,
+          "predicted_demand": 0.5904014424044254
+        },
+        {
+          "period_start": "2026-11-23",
+          "days_covered": 7,
+          "predicted_demand": 0.5835184646657856
+        },
+        {
+          "period_start": "2026-11-30",
+          "days_covered": 7,
+          "predicted_demand": 0.5473916365219632
+        },
+        {
+          "period_start": "2026-12-07",
+          "days_covered": 2,
+          "predicted_demand": 0.6519153849139508
+        }
+      ],
+      "historical_demand": 10
+    }
+  ]
+}
+
+Campos:
+- data_type: string
+- horizon_days: integer
+- forecast_start: string (fecha)
+- forecast_end_exclusive: string (fecha)
+- books: array de objetos con:
+  - book_id: string
+  - category: string
+  - status: string; valores admitidos:
+    PREDICCION_DISPONIBLE o DATOS_INSUFICIENTES
+  - forecast_demand_30_days: number o null
+  - weekly_forecast: array de objetos con:
+    - period_start: string (fecha)
+    - days_covered: integer
+    - predicted_demand: number
+  - historical_demand: integer
+
+========================================================================
+4. GET /predictions/{book_id}
+========================================================================
+
+Parámetro de ruta:
+- book_id: string; identificador del libro.
+
+Ejemplo JSON:
+{
+  "book_id": "book-demo-001",
+  "category": "Novelas",
+  "status": "PREDICCION_DISPONIBLE",
+  "forecast_demand_30_days": 2.53,
+  "weekly_forecast": [
+    {
+      "period_start": "2026-11-09",
+      "days_covered": 7,
+      "predicted_demand": 0.6262251789777671
+    },
+    {
+      "period_start": "2026-11-16",
+      "days_covered": 7,
+      "predicted_demand": 0.5904014424044254
+    },
+    {
+      "period_start": "2026-11-23",
+      "days_covered": 7,
+      "predicted_demand": 0.5835184646657856
+    },
+    {
+      "period_start": "2026-11-30",
+      "days_covered": 7,
+      "predicted_demand": 0.5473916365219632
+    },
+    {
+      "period_start": "2026-12-07",
+      "days_covered": 2,
+      "predicted_demand": 0.6519153849139508
+    }
+  ],
+  "historical_demand": 10
+}
+
+Campos y tipos: iguales a un elemento de books[] de GET /predictions.
+Si el libro no existe, el endpoint responde HTTP 404.
+
+========================================================================
+5. GET /recommendations
+========================================================================
+
+Parámetro:
+- limit: integer, opcional; predeterminado 200, mínimo 1 y máximo 500.
+
+Ejemplo JSON (limit=1):
+{
+  "data_type": "sintetico_demostrativo",
+  "horizon_days": 30,
+  "safety_margin": 0.2,
+  "recommendations": [
+    {
+      "book_id": "book-demo-001",
+      "category": "Novelas",
+      "data_type": "sintetico_demostrativo",
+      "historical_demand": 10,
+      "forecast_demand_30_days": 2.53,
+      "stock_available": 1,
+      "reserved_units": 2,
+      "total_inventory": 3,
+      "risk_level": "ALTO",
+      "recommended_replenishment": 3,
+      "safety_margin": 0.2,
+      "formula": "max(0, ceil(demanda_pronosticada_30_dias * (1 + margen_seguridad) - stock_disponible))"
+    }
+  ]
+}
+
+Campos:
+- data_type: string
+- horizon_days: integer
+- safety_margin: number
+- recommendations: array de objetos con:
+  - book_id: string
+  - category: string
+  - data_type: string
+  - historical_demand: integer
+  - forecast_demand_30_days: number o null
+  - stock_available: integer
+  - reserved_units: integer
+  - total_inventory: integer
+  - risk_level: string; valores admitidos: ALTO, MEDIO, BAJO o
+    DATOS_INSUFICIENTES
+  - recommended_replenishment: integer
+  - safety_margin: number
+  - formula: string
+
+========================================================================
+6. GET /recommendations/{book_id}
+========================================================================
+
+Parámetro de ruta:
+- book_id: string; identificador del libro.
+
+Ejemplo JSON:
+{
+  "book_id": "book-demo-001",
+  "category": "Novelas",
+  "data_type": "sintetico_demostrativo",
+  "historical_demand": 10,
+  "forecast_demand_30_days": 2.53,
+  "stock_available": 1,
+  "reserved_units": 2,
+  "total_inventory": 3,
+  "risk_level": "ALTO",
+  "recommended_replenishment": 3,
+  "safety_margin": 0.2,
+  "formula": "max(0, ceil(demanda_pronosticada_30_dias * (1 + margen_seguridad) - stock_disponible))"
+}
+
+Campos y tipos: iguales a un elemento de recommendations[] de
+GET /recommendations.
+Si el libro no existe, el endpoint responde HTTP 404.
+
+========================================================================
+7. GET /metrics
+========================================================================
+
+Parámetros: ninguno.
+
+Ejemplo JSON. per_book_errors incluye aquí una entrada representativa:
+{
+  "data_type": "sintetico_demostrativo",
+  "trained_at": "2026-11-09T05:31:57.525510+00:00",
+  "evaluation": {
+    "evaluation_type": "cronologica",
+    "train_start": "2026-01-26",
+    "train_end": "2026-08-31",
+    "test_start": "2026-09-07",
+    "test_end": "2026-11-02",
+    "train_samples": 1440,
+    "test_samples": 405,
+    "mlp_regressor": {
+      "mae": 0.5547547783343703,
+      "rmse": 0.7495999795563756
+    },
+    "baseline_rolling_4_mean": {
+      "mae": 0.5895061728395061,
+      "rmse": 0.7994017825077344
+    },
+    "mlp_raw_negative_predictions": 7,
+    "mlp_better_than_baseline_mae": true,
+    "mlp_better_than_baseline_rmse": true,
+    "low_demand_evaluation": {
+      "books": 16,
+      "test_samples": 144,
+      "mlp_regressor": {
+        "mae": 0.49120301216332746,
+        "rmse": 0.656923601491736
+      },
+      "baseline_rolling_4_mean": {
+        "mae": 0.5208333333333334,
+        "rmse": 0.699702317656111
+      }
+    },
+    "per_book_errors": [
+      {
+        "book_id": "book-demo-001",
+        "test_periods": 9,
+        "mlp_mae": 0.37360878634292344,
+        "baseline_mae": 0.4166666666666667
+      }
+    ],
+    "conclusion": "El MLPRegressor supera al modelo de referencia en MAE y RMSE."
+  }
+}
+
+Campos:
+- data_type: string
+- trained_at: string (fecha/hora ISO)
+- evaluation: object con:
+  - evaluation_type: string
+  - train_start, train_end, test_start, test_end: string (fecha ISO)
+  - train_samples, test_samples, mlp_raw_negative_predictions: integer
+  - mlp_regressor: object con mae y rmse (number)
+  - baseline_rolling_4_mean: object con mae y rmse (number)
+  - mlp_better_than_baseline_mae: boolean
+  - mlp_better_than_baseline_rmse: boolean
+  - low_demand_evaluation: object con books y test_samples (integer) y
+    mlp_regressor/baseline_rolling_4_mean (objetos con mae/rmse number)
+  - per_book_errors: array de objetos:
+    - book_id: string
+    - test_periods: integer
+    - mlp_mae: number
+    - baseline_mae: number
+  - conclusion: string
+
+========================================================================
+8. GET /analytics
+========================================================================
+
+Parámetros: ninguno.
+
+Ejemplo JSON. Las listas muestran una entrada representativa:
+{
+  "data_type": "sintetico_demostrativo",
+  "analytics": {
+    "data_type": "sintetico_demostrativo",
+    "total_demand": 980,
+    "books_analyzed": 100,
+    "periods_analyzed": 49,
+    "period_start": "2025-12-01",
+    "period_end": "2026-11-02",
+    "history_span_days": 336,
+    "descriptive_statistics": {
+      "mean_weekly_book_demand": 0.2,
+      "std_weekly_book_demand": 0.46729792096560363,
+      "median_weekly_book_demand": 0.0,
+      "zero_demand_book_periods": 4044,
+      "nonzero_demand_book_periods": 856
+    },
+    "demand_by_book": [
+      {
+        "book_id": "book-demo-001",
+        "total_demand": 30,
+        "activity_level": "ALTA"
+      }
+    ],
+    "demand_by_category": [
+      {
+        "category": "Novelas",
+        "demand": 247
+      }
+    ],
+    "monthly_demand": [
+      {
+        "month": "2025-12",
+        "demand": 86
+      }
+    ],
+    "weekday_demand": [
+      {
+        "weekday": "Friday",
+        "demand": 129
+      }
+    ],
+    "trend": {
+      "direction": "crecimiento",
+      "change_percent": 52.970193115029396,
+      "method": "comparing mean weekly demand across chronological halves"
+    },
+    "seasonality": {
+      "assessed": false,
+      "finding": "Se requieren al menos dos años para evaluar estacionalidad anual."
+    },
+    "insufficient_activity_books": 55,
+    "non_demo_books_excluded": 1
+  }
+}
+
+Campos:
+- data_type: string (aparece en el nivel superior y dentro de analytics)
+- analytics: object con:
+  - total_demand, books_analyzed, periods_analyzed, history_span_days,
+    insufficient_activity_books, non_demo_books_excluded: integer
+  - period_start, period_end: string (fecha ISO)
+  - descriptive_statistics: object:
+    - mean_weekly_book_demand, std_weekly_book_demand,
+      median_weekly_book_demand: number
+    - zero_demand_book_periods, nonzero_demand_book_periods: integer
+  - demand_by_book: array de objetos con book_id (string), total_demand
+    (integer), activity_level (string)
+  - demand_by_category: array de objetos con category (string), demand
+    (integer)
+  - monthly_demand: array de objetos con month (string), demand (integer)
+  - weekday_demand: array de objetos con weekday (string), demand (integer)
+  - trend: object con direction (string), change_percent (number o null) y
+    method (string)
+  - seasonality: object con assessed (boolean) y finding (string)
+
+========================================================================
+NOTAS DE PARÁMETROS Y ERRORES
+========================================================================
+
+- /health, /model/status, /metrics y /analytics no reciben parámetros.
+- /predictions y /recommendations admiten limit (integer entre 1 y 500,
+  predeterminado 200).
+- /predictions/{book_id} y /recommendations/{book_id} reciben book_id como
+  parámetro de ruta de tipo string.
+- Si no existe un modelo, /model/status responde normalmente con trained=false
+  y campos opcionales nulos. /predictions, /recommendations y /metrics
+  responden HTTP 503 cuando no se puede cargar el modelo.
+- /analytics responde HTTP 503 si todavía no existe analytics.json.
+- Los dos endpoints por book_id responden HTTP 404 cuando el libro no existe.
+- Los ejemplos corresponden a resultados sintéticos demostrativos guardados
+  localmente, no a una consulta actual a Neon.

@@ -17,26 +17,22 @@ from app.services.training import train_and_save
 def build_fixture():
     books = [
         {
-            "book_id": "demo-a",
+            "book_id": "book-a",
             "category": "Historia",
             "stock": 5,
             "reserved": 2,
-            "is_demo": True,
-            "description": "[DEMO-LECTIO] Private fixture must not persist",
         },
         {
-            "book_id": "demo-b",
+            "book_id": "book-b",
             "category": "Ciencia",
             "stock": 1,
             "reserved": 1,
-            "is_demo": True,
         },
         {
-            "book_id": "real-c",
+            "book_id": "book-c",
             "category": "Arte",
             "stock": 3,
             "reserved": 0,
-            "is_demo": False,
         },
     ]
     events = []
@@ -46,11 +42,9 @@ def build_fixture():
         events.append(
             {
                 "reservation_id": f"a-{counter}",
-                "book_id": "demo-a",
+                "book_id": "book-a",
                 "created_at": period + pd.Timedelta(days=1),
                 "state": ("ACTIVA", "DEVUELTA", "CANCELADA")[week_index % 3],
-                "is_synthetic": True,
-                "correo": "private@example.test",
             }
         )
         counter += 1
@@ -58,37 +52,37 @@ def build_fixture():
             events.append(
                 {
                     "reservation_id": f"b-{counter}",
-                    "book_id": "demo-b",
+                    "book_id": "book-b",
                     "created_at": period + pd.Timedelta(days=2),
                     "state": "DEVUELTA",
-                    "is_synthetic": True,
                 }
             )
             counter += 1
 
     events.extend(
         [
-            {**events[0], "state": "CANCELADA"},
+            {
+                **events[0],
+                "created_at": events[0]["created_at"] + pd.Timedelta(hours=1),
+                "state": "CANCELADA",
+            },
             {
                 "reservation_id": "real-event",
-                "book_id": "real-c",
+                "book_id": "book-c",
                 "created_at": periods[-1],
                 "state": "ACTIVA",
-                "is_synthetic": False,
             },
             {
                 "reservation_id": "invalid-date",
-                "book_id": "demo-a",
+                "book_id": "book-a",
                 "created_at": "not-a-date",
                 "state": "ACTIVA",
-                "is_synthetic": True,
             },
             {
                 "reservation_id": "invalid-state",
-                "book_id": "demo-a",
+                "book_id": "book-a",
                 "created_at": periods[-1],
                 "state": "PENDING",
-                "is_synthetic": True,
             },
         ]
     )
@@ -100,19 +94,30 @@ class DataPreparationTests(unittest.TestCase):
         books, events = build_fixture()
         self.prepared = prepare_data(books, events)
 
-    def test_duplicates_invalid_rows_and_non_demo_are_excluded(self):
+    def test_duplicates_invalid_rows_and_cancelled_reservations_are_excluded(self):
         report = self.prepared.report
         self.assertEqual(report["duplicate_reservations_removed"], 1)
         self.assertEqual(report["invalid_date_reservations_removed"], 1)
         self.assertEqual(report["invalid_state_reservations_removed"], 1)
-        self.assertEqual(report["non_synthetic_reservations_excluded"], 1)
-        self.assertEqual(report["valid_demo_reservations"], 48)
+        self.assertEqual(report["cancelled_reservations_excluded"], 10)
+        self.assertEqual(report["valid_reservations"], 39)
+        self.assertEqual(report["data_type"], "datos_reales")
+        self.assertEqual(report["data_source"], "Neon PostgreSQL")
 
-    def test_all_statuses_count_once_and_zero_weeks_are_filled(self):
-        self.assertEqual(int(self.prepared.panel["demand"].sum()), 48)
+    def test_active_and_returned_reservations_count_and_zero_weeks_are_filled(self):
+        self.assertEqual(int(self.prepared.panel["demand"].sum()), 39)
         self.assertEqual(self.prepared.report["periods"], 32)
         self.assertGreater(self.prepared.report["zero_book_periods"], 0)
-        self.assertEqual(set(self.prepared.panel["book_id"]), {"demo-a", "demo-b"})
+        self.assertEqual(
+            set(self.prepared.panel["book_id"]),
+            {"book-a", "book-b", "book-c"},
+        )
+        self.assertEqual(
+            self.prepared.panel.loc[
+                self.prepared.panel["book_id"] == "book-c", "demand"
+            ].sum(),
+            1,
+        )
         weekday_total = sum(
             item["demand"]
             for item in build_analytics(
@@ -121,15 +126,15 @@ class DataPreparationTests(unittest.TestCase):
                 self.prepared.events,
             )["weekday_demand"]
         )
-        self.assertEqual(weekday_total, 48)
+        self.assertEqual(weekday_total, 39)
 
     def test_features_use_only_previous_periods_and_contain_no_personal_fields(self):
         row = self.prepared.features.loc[
-            (self.prepared.features["book_id"] == "demo-a")
+            (self.prepared.features["book_id"] == "book-a")
             & (self.prepared.features["period_start"] == pd.Timestamp("2025-03-17"))
         ].iloc[0]
         previous = self.prepared.panel.loc[
-            (self.prepared.panel["book_id"] == "demo-a")
+            (self.prepared.panel["book_id"] == "book-a")
             & (self.prepared.panel["period_start"] == pd.Timestamp("2025-03-10")),
             "demand",
         ].iloc[0]
@@ -137,6 +142,7 @@ class DataPreparationTests(unittest.TestCase):
         self.assertNotIn("correo", self.prepared.panel.columns)
         self.assertNotIn("description", self.prepared.panel.columns)
         self.assertNotIn("username", self.prepared.panel.columns)
+        self.assertNotIn("is_demo", self.prepared.catalog.columns)
         self.assertNotIn("correo", self.prepared.events.columns)
         self.assertNotIn("reservation_id", self.prepared.events.columns)
 
@@ -185,7 +191,7 @@ class TrainingAndRecommendationTests(unittest.TestCase):
 
     def test_recommendation_risk_and_replenishment_thresholds(self):
         forecasts = {
-            "data_type": "sintetico_demostrativo",
+            "data_type": "datos_reales",
             "horizon_days": 30,
             "books": [
                 {"book_id": "high", "category": "A", "historical_demand": 20,

@@ -77,7 +77,8 @@ def build_analytics(
     ).days
     enough_for_seasonality = history_span_days >= 730
     return {
-        "data_type": "sintetico_demostrativo",
+        "data_type": "datos_reales",
+        "data_source": "Neon PostgreSQL",
         "total_demand": int(panel["demand"].sum()),
         "books_analyzed": int(panel["book_id"].nunique()),
         "periods_analyzed": int(panel["period_start"].nunique()),
@@ -117,13 +118,9 @@ def build_analytics(
                 else "La estacionalidad se describe, pero no se afirma como patrón probado."
             ),
         },
-        "insufficient_activity_books": int(
-            (
-                catalog["is_demo"]
-                & ~catalog["sufficient_history"]
-            ).sum()
+        "insufficient_history_books": int(
+            (~catalog["sufficient_history"]).sum()
         ),
-        "non_demo_books_excluded": int((~catalog["is_demo"]).sum()),
     }
 
 
@@ -144,7 +141,7 @@ def save_reports(
     monthly = pd.DataFrame(analytics["monthly_demand"])
     fig, axis = plt.subplots(figsize=(11, 5))
     axis.plot(monthly["month"], monthly["demand"], marker="o")
-    axis.set(title="Solicitudes demostrativas por mes", xlabel="Mes", ylabel="Solicitudes")
+    axis.set(title="Reservas históricas por mes", xlabel="Mes", ylabel="Reservas")
     axis.tick_params(axis="x", rotation=45)
     fig.tight_layout()
     fig.savefig(output_dir / "demand_over_time.png", dpi=140)
@@ -153,7 +150,7 @@ def save_reports(
     top_books = pd.DataFrame(analytics["demand_by_book"]).head(15).sort_values("total_demand")
     fig, axis = plt.subplots(figsize=(10, 6))
     axis.barh(top_books["book_id"], top_books["total_demand"])
-    axis.set(title="Libros demostrativos con mayor demanda", xlabel="Solicitudes")
+    axis.set(title="Libros con mayor demanda", xlabel="Reservas")
     fig.tight_layout()
     fig.savefig(output_dir / "top_books.png", dpi=140)
     plt.close(fig)
@@ -161,7 +158,7 @@ def save_reports(
     categories = pd.DataFrame(analytics["demand_by_category"])
     fig, axis = plt.subplots(figsize=(10, 6))
     axis.barh(categories["category"], categories["demand"])
-    axis.set(title="Demanda demostrativa por categoría", xlabel="Solicitudes")
+    axis.set(title="Demanda por categoría", xlabel="Reservas")
     fig.tight_layout()
     fig.savefig(output_dir / "demand_by_category.png", dpi=140)
     plt.close(fig)

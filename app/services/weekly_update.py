@@ -326,7 +326,7 @@ class WeeklyModelUpdater:
             record.update(
                 {
                     "reservations_queried": preparation["source_reservations"],
-                    "books_analyzed": preparation["demo_books"],
+                    "books_analyzed": preparation["books_total"],
                     "records_used": evaluation["train_samples"],
                     "metrics": {
                         "mae": evaluation["mlp_regressor"]["mae"],
