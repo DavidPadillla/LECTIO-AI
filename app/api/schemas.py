@@ -80,6 +80,7 @@ class WeeklyPrediction(BaseModel):
 
 class BookPrediction(BaseModel):
     book_id: str
+    titulo: str | None
     category: str
     status: Literal["PREDICCION_DISPONIBLE", "DATOS_INSUFICIENTES"]
     forecast_demand_30_days: float | None
@@ -97,6 +98,7 @@ class PredictionsResponse(BaseModel):
 
 class Recommendation(BaseModel):
     book_id: str
+    titulo: str | None
     category: str
     data_type: str
     historical_demand: int

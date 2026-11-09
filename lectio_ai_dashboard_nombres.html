@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#101827">
+  <title>LECTIO AI | Inteligencia de demanda</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <style>
+    :root{--bg:#0b1220;--panel:#111c2e;--panel2:#162338;--line:#26364d;--text:#edf3fb;--muted:#91a2b8;--green:#42d6a4;--blue:#68a7ff;--amber:#f4bd62;--red:#ff7777;--radius:18px;--shadow:0 18px 50px #0003}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 12% -10%,#1b3651 0,transparent 36%),var(--bg);color:var(--text);font-family:"DM Sans",sans-serif;min-height:100vh}
+    button,select{font:inherit}.shell{max-width:1500px;margin:auto;padding:28px 34px 56px}
+    header{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:30px}
+    .brand{display:flex;align-items:center;gap:13px}.logo{width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,#42d6a4,#218b9b);display:grid;place-items:center;color:#061a1b;font-weight:900;font-size:22px;box-shadow:0 8px 24px #42d6a433}
+    .brand-name{font:800 18px Manrope,sans-serif;letter-spacing:.11em}.brand-sub{font-size:11px;color:var(--muted);letter-spacing:.12em;margin-top:3px}
+    .header-right{display:flex;align-items:center;gap:12px}.status{display:flex;align-items:center;gap:8px;color:#b8c8d9;font-size:12px;background:#15263a;border:1px solid var(--line);padding:9px 12px;border-radius:30px}.dot{width:7px;height:7px;border-radius:50%;background:var(--amber)}.dot.ok{background:var(--green);box-shadow:0 0 10px #42d6a4}
+    .btn{border:1px solid var(--line);background:#17263b;color:var(--text);padding:10px 15px;border-radius:11px;cursor:pointer;font-weight:600;font-size:12px;transition:.2s}.btn:hover{border-color:#4d7899;transform:translateY(-1px)}.btn.primary{background:var(--green);color:#06221b;border-color:var(--green)}
+    .hero{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;margin-bottom:24px}.eyebrow{font-size:11px;color:var(--green);font-weight:700;letter-spacing:.16em;text-transform:uppercase}.hero h1{font:800 clamp(27px,4vw,40px) Manrope,sans-serif;margin:9px 0 7px;letter-spacing:-.04em}.hero p{margin:0;color:var(--muted);font-size:14px}.period{font-size:12px;color:var(--muted);text-align:right}
+    .notice{display:flex;gap:11px;align-items:flex-start;padding:14px 16px;border:1px solid #755a2b;background:#30271988;border-radius:13px;color:#e9c98e;font-size:12px;line-height:1.55;margin-bottom:22px}.notice strong{color:#ffe0a4}
+    .grid{display:grid;gap:16px}.kpis{grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:18px}.card{background:linear-gradient(155deg,#142238,#101a2a);border:1px solid var(--line);border-radius:var(--radius);padding:19px;box-shadow:var(--shadow);min-width:0}.kpi-top{display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:12px}.kpi-icon{width:31px;height:31px;border-radius:10px;background:#20354b;color:var(--green);display:grid;place-items:center;font-size:15px}.kpi-value{font:800 29px Manrope,sans-serif;margin:14px 0 4px;letter-spacing:-.04em}.kpi-foot{color:var(--muted);font-size:11px}
+    .main-grid{grid-template-columns:1.45fr 1fr;margin-bottom:18px}.card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:17px}.card-title{font:700 15px Manrope,sans-serif}.card-sub{font-size:11px;color:var(--muted);margin-top:5px}.tag{font-size:10px;color:#9dc9e7;background:#1b344a;border:1px solid #294a65;border-radius:20px;padding:5px 9px;white-space:nowrap}.chart-wrap{height:260px;position:relative}.category-list{display:grid;gap:15px}.category-row{display:grid;grid-template-columns:86px 1fr 34px;align-items:center;gap:10px;font-size:12px}.category-name{color:#c5d2e1}.bar{height:7px;background:#26364a;border-radius:20px;overflow:hidden}.bar>span{display:block;height:100%;background:linear-gradient(90deg,#42d6a4,#68a7ff);border-radius:20px}.category-count{text-align:right;color:#dbe7f4;font-variant-numeric:tabular-nums}
+    .forecast-grid{grid-template-columns:1fr 1.2fr;margin-bottom:18px}.select{background:#0e1928;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:9px 11px;max-width:250px;width:100%;font-size:12px}.forecast-empty{height:230px;display:grid;place-items:center;text-align:center;color:var(--muted);font-size:13px;padding:20px}.forecast-stat{display:flex;gap:24px;margin-top:12px}.forecast-stat b{font:700 20px Manrope}.forecast-stat span{display:block;color:var(--muted);font-size:10px;margin-top:3px}
+    .model-grid{grid-template-columns:1fr 1fr 1fr 1fr;margin-bottom:18px}.metric{padding:14px;border-radius:13px;background:#0e1928;border:1px solid #23344a}.metric small{color:var(--muted);font-size:10px}.metric b{display:block;font:700 21px Manrope;margin-top:7px}.model-note{font-size:12px;color:#a9c8bc;margin-top:14px;line-height:1.5}
+    .table-card{padding:0;overflow:hidden}.table-head{padding:20px 20px 14px;display:flex;align-items:flex-start;justify-content:space-between;gap:15px}.table-scroll{overflow:auto;max-height:580px}table{border-collapse:collapse;width:100%;font-size:11px;white-space:nowrap}thead{position:sticky;top:0;background:#17263a;z-index:1}th{text-align:left;color:#91a2b8;font-weight:600;padding:12px 15px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}td{padding:12px 15px;border-bottom:1px solid #223148;color:#d4dfeb}tbody tr:hover{background:#1a2a40}.risk{display:inline-block;border-radius:20px;padding:4px 8px;font-size:9px;font-weight:700}.risk.high{background:#49292d;color:#ff9b9b}.risk.medium{background:#45391f;color:#f6cf7c}.risk.low{background:#193c36;color:#83e2bf}.risk.na{background:#293447;color:#aab8ca}.muted{color:var(--muted)}.book-id{font-family:ui-monospace,monospace;color:#a9bdd4}.empty{padding:28px;text-align:center;color:var(--muted)}footer{display:flex;justify-content:space-between;gap:20px;color:#74869d;font-size:10px;margin-top:20px}
+    .error{display:none;padding:12px 15px;border:1px solid #713b42;background:#351f29;color:#ffb6bd;border-radius:12px;font-size:12px;margin-bottom:18px}.loading{opacity:.55;pointer-events:none}
+    @media(max-width:1050px){.kpis{grid-template-columns:repeat(2,1fr)}.main-grid,.forecast-grid{grid-template-columns:1fr}.model-grid{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:650px){.shell{padding:18px 14px 35px}header{align-items:flex-start}.header-right{flex-direction:column;align-items:flex-end}.status{font-size:10px}.hero{display:block}.period{text-align:left;margin-top:14px}.kpis{gap:10px}.card{padding:15px}.kpi-value{font-size:24px}.category-row{grid-template-columns:75px 1fr 30px}.table-head{display:block}.table-head .select{margin-top:12px;max-width:none}.model-grid{gap:9px}footer{display:block;line-height:1.7}}
+  </style>
+</head>
+<body>
+<div class="shell" id="app">
+  <header>
+    <div class="brand"><div class="logo">L</div><div><div class="brand-name">LECTIO <span style="color:var(--green)">AI</span></div><div class="brand-sub">DEMAND INTELLIGENCE</div></div></div>
+    <div class="header-right"><div class="status"><span class="dot" id="statusDot"></span><span id="connectionText">Conectando con la API…</span></div><button class="btn primary" id="refreshBtn">↻ &nbsp;Actualizar datos</button></div>
+  </header>
+
+  <section class="hero"><div><div class="eyebrow">Panel de inteligencia</div><h1>Demanda y decisiones,<br>con datos.</h1><p>Pronóstico de reservas, análisis histórico y recomendaciones de inventario.</p></div><div class="period" id="periodLabel">Periodo de análisis · —</div></section>
+  <div class="notice" id="demoNotice"><span>ⓘ</span><div><strong>Entorno demostrativo.</strong> La API identifica los datos como sintéticos. Estas cifras permiten validar el funcionamiento técnico; no representan todavía la demanda real de la biblioteca.</div></div>
+  <div class="error" id="errorBox"></div>
+
+  <section class="grid kpis">
+    <article class="card"><div class="kpi-top"><span>Demanda histórica</span><span class="kpi-icon">↗</span></div><div class="kpi-value" id="kpiDemand">—</div><div class="kpi-foot" id="kpiPeriod">Reservas en el periodo</div></article>
+    <article class="card"><div class="kpi-top"><span>Libros analizados</span><span class="kpi-icon">▤</span></div><div class="kpi-value" id="kpiBooks">—</div><div class="kpi-foot" id="kpiInsufficient">Cobertura del catálogo</div></article>
+    <article class="card"><div class="kpi-top"><span>Error absoluto medio</span><span class="kpi-icon">◎</span></div><div class="kpi-value" id="kpiMae">—</div><div class="kpi-foot">MAE del modelo · menor es mejor</div></article>
+    <article class="card"><div class="kpi-top"><span>Reposición sugerida</span><span class="kpi-icon">＋</span></div><div class="kpi-value" id="kpiRestock">—</div><div class="kpi-foot">Libros con recomendación mayor que cero</div></article>
+  </section>
+
+  <section class="grid main-grid">
+    <article class="card"><div class="card-head"><div><div class="card-title">Demanda mensual</div><div class="card-sub">Reservas registradas por mes</div></div><span class="tag">HISTÓRICO</span></div><div class="chart-wrap"><canvas id="monthlyChart"></canvas></div></article>
+    <article class="card"><div class="card-head"><div><div class="card-title">Demanda por categoría</div><div class="card-sub">Distribución de solicitudes</div></div><span class="tag">CATEGORÍAS</span></div><div class="category-list" id="categoryList"><div class="empty">Cargando categorías…</div></div></article>
+  </section>
+
+  <section class="card" style="margin-bottom:18px">
+    <div class="card-head"><div><div class="card-title">¿Qué predice LECTIO AI?</div>
+    <div class="card-sub">El MLPRegressor estima cuántas reservas podría recibir cada libro durante los próximos 30 días.</div></div><span class="tag">SALIDA DEL MODELO</span></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px">
+      <div class="metric"><small>1 · Pronóstico de demanda</small><b style="font-size:15px">Reservas por libro</b><div class="card-sub">Estimación total a 30 días y desglose semanal.</div></div>
+      <div class="metric"><small>2 · Evaluación de inventario</small><b style="font-size:15px">Riesgo de stock</b><div class="card-sub">Compara la demanda estimada con las existencias y unidades reservadas.</div></div>
+      <div class="metric"><small>3 · Decisión sugerida</small><b style="font-size:15px">Unidades por reponer</b><div class="card-sub">Calcula una sugerencia de reposición con el margen de seguridad configurado.</div></div>
+    </div>
+  </section>
+  <section class="grid forecast-grid">
+    <article class="card"><div class="card-head"><div><div class="card-title">Pronóstico por libro</div><div class="card-sub">Estimación de demanda para los próximos 30 días</div></div><span class="tag">PREDICCIÓN</span></div>
+      <select class="select" id="bookSelect"><option value="">Selecciona un libro</option></select>
+      <div class="forecast-stat"><div><b id="forecastTotal">—</b><span>Reservas estimadas en 30 días</span></div><div><b id="forecastRisk">—</b><span>Estado de predicción</span></div></div>
+    </article>
+    <article class="card"><div class="card-head"><div><div class="card-title">Evolución del pronóstico</div><div class="card-sub">Estimación semanal del libro seleccionado</div></div><span class="tag">30 DÍAS</span></div><div class="chart-wrap" id="forecastWrap"><div class="forecast-empty" id="forecastEmpty">Selecciona un libro para consultar su estimación.</div><canvas id="forecastChart" style="display:none"></canvas></div></article>
+  </section>
+
+  <article class="card" style="margin-bottom:18px"><div class="card-head"><div><div class="card-title">Estado y evaluación del modelo</div><div class="card-sub">Comparación del modelo predictivo con la referencia</div></div><span class="tag" id="modelType">MODELO</span></div>
+    <div class="grid model-grid">
+      <div class="metric"><small>RMSE · modelo</small><b id="rmse">—</b></div><div class="metric"><small>MAE · modelo base</small><b id="baselineMae">—</b></div><div class="metric"><small>Muestras de entrenamiento</small><b id="trainSamples">—</b></div><div class="metric"><small>Muestras de prueba</small><b id="testSamples">—</b></div>
+    </div><div class="model-note" id="modelNote">Esperando información del modelo.</div>
+  </article>
+
+  <article class="card table-card">
+    <div class="table-head"><div><div class="card-title">Recomendaciones de inventario</div><div class="card-sub">Riesgo y unidades sugeridas para reposición · horizonte de 30 días · margen de seguridad <span id="safetyMargin">20%</span></div></div><select class="select" id="riskFilter" aria-label="Filtrar por riesgo"><option value="ALL">Todos los riesgos</option><option value="ALTO">Riesgo alto</option><option value="MEDIO">Riesgo medio</option><option value="BAJO">Riesgo bajo</option><option value="DATOS_INSUFICIENTES">Datos insuficientes</option></select></div>
+    <div class="table-scroll"><table><thead><tr><th>LIBRO</th><th>CATEGORÍA</th><th>DEMANDA ESTIMADA</th><th>STOCK</th><th>RESERVADAS</th><th>RIESGO</th><th>REPONER</th></tr></thead><tbody id="recommendationRows"><tr><td colspan="7" class="empty">Cargando recomendaciones…</td></tr></tbody></table></div>
+  </article>
+  <footer><span>LECTIO AI · Inteligencia de demanda bibliotecaria</span><span>Se muestran los títulos enviados por la API; los identificadores se usan internamente. </span></footer>
+</div>
+<script>
+(() => {
+  const API = "https://lectio-ai-production.up.railway.app";
+  const $ = id => document.getElementById(id);
+  let monthlyChart = null, forecastChart = null, analytics = null, predictions = [], recommendations = [], model = {}, books = new Map();
+
+  const num = v => v === null || v === undefined || v === "" ? null : (Number.isFinite(Number(v)) ? Number(v) : null);
+  const fmt = v => v == null ? "—" : new Intl.NumberFormat("es-CO",{maximumFractionDigits:2}).format(v);
+  const first = (obj, keys, fallback=null) => { for (const k of keys) if (obj && obj[k] !== undefined && obj[k] !== null) return obj[k]; return fallback; };
+  const unwrap = x => x?.data ?? x?.results ?? x?.items ?? x;
+  const listFrom = (x, keys=[]) => {
+    if (Array.isArray(x)) return x;
+    for (const k of keys) if (Array.isArray(x?.[k])) return x[k];
+    const d=unwrap(x); if(Array.isArray(d)) return d;
+    for (const k of keys) if (Array.isArray(d?.[k])) return d[k];
+    return [];
+  };
+  async function get(path) {
+    const r = await fetch(API + path, {headers:{Accept:"application/json"}});
+    if(!r.ok) throw new Error(`${path} respondió HTTP ${r.status}`);
+    return r.json();
+  }
+  function setStatus(ok,text){$("statusDot").classList.toggle("ok",ok);$("connectionText").textContent=text;}
+  function chartOptions(){return {responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{backgroundColor:"#0b1422",titleColor:"#fff",bodyColor:"#cbd8e7",borderColor:"#30445d",borderWidth:1}},scales:{x:{grid:{display:false},ticks:{color:"#91a2b8",font:{size:10}}},y:{beginAtZero:true,grid:{color:"#26364d"},ticks:{color:"#91a2b8",font:{size:10}}}}};}
+  function drawMonthly(items){
+    const labels=items.map(x=>x.month ?? x.period ?? x.label ?? "—");
+    const values=items.map(x=>num(first(x,["demand","total_demand","reservations","count"],0)) ?? 0);
+    if(monthlyChart) monthlyChart.destroy();
+    monthlyChart=new Chart($("monthlyChart"),{type:"bar",data:{labels,datasets:[{data:values,backgroundColor:"#42d6a4",borderRadius:6,maxBarThickness:34}]},options:chartOptions()});
+  }
+  function drawCategories(items){
+    const root=$("categoryList");root.innerHTML="";
+    const max=Math.max(1,...items.map(x=>num(first(x,["demand","total_demand","count"],0))||0));
+    items.forEach(x=>{const name=first(x,["category","name","label"],"Sin categoría"),value=num(first(x,["demand","total_demand","count"],0))||0;
+      const row=document.createElement("div");row.className="category-row";
+      row.innerHTML=`<span class="category-name"></span><div class="bar"><span style="width:${Math.max(0,Math.min(100,value/max*100))}%"></span></div><span class="category-count">${fmt(value)}</span>`;
+      row.querySelector(".category-name").textContent=name;root.appendChild(row);
+    });
+    if(!items.length) root.innerHTML='<div class="empty">No hay datos de categorías.</div>';
+  }
+  function getBookId(x){
+    return String(first(x,["book_id","libro_id","id_book","libro_fisico_id","id"],""));
+  }
+  // Acepta titulo de libros_fisicos y libro de reservas, además de aliases habituales.
+  function titleFrom(value){
+    if(typeof value === "string" || typeof value === "number"){
+      const text=String(value).trim();
+      return text||null;
+    }
+    if(value && typeof value === "object"){
+      const nested=first(value,["titulo","title","book_title","book_name","nombre_libro","name","libro"],null);
+      if(nested!==value) return titleFrom(nested);
+    }
+    return null;
+  }
+  function getTitle(x){
+    if(!x || typeof x!=="object") return null;
+    const direct=titleFrom(first(x,["titulo","title","libro","book_title","book_name","nombre_libro","name"],null));
+    if(direct) return direct;
+    for(const key of ["book","libro_fisico","physical_book","book_info","libro_info"]){
+      const nested=titleFrom(x[key]);
+      if(nested) return nested;
+    }
+    return null;
+  }
+  function normalizePrediction(x){
+    return {id:getBookId(x),title:getTitle(x),demand:num(first(x,["forecast_demand_30_days","predicted_demand","demand_predicted","forecast","prediction","predicted_value","demand_30d","estimated_demand","total_demand"],null)),risk:first(x,["risk_level","status","risk","riesgo","activity_level"],null),raw:x};
+  }
+  function normalizeRecommendation(x){
+    return {id:getBookId(x),title:getTitle(x),category:first(x,["category","categoria"],"—"),demand:num(first(x,["forecast_demand_30_days","predicted_demand","estimated_demand","demand_30d","forecast","predicted_value","demand"],null)),stock:num(first(x,["available_stock","stock_available","stock","available"],null)),reserved:num(first(x,["reserved","reserved_stock","reservadas","reserved_units"],null)),risk:String(first(x,["risk_level","risk","riesgo","status"],"—")).toUpperCase(),reorder:num(first(x,["recommended_replenishment","recommended_restock","restock_quantity","reorder_quantity","units_to_restock","replenishment","reorder","suggested_quantity"],0))||0,raw:x};
+  }
+  function mergeNames(){
+    const sources=[...predictions,...recommendations];
+    sources.forEach(x=>{const id=x.id;if(id && x.title) books.set(id,x.title);});
+  }
+  function fillSelect(){
+    const s=$("bookSelect"),old=s.value;s.innerHTML='<option value="">Selecciona un libro</option>';
+    const ids=new Set([...predictions,...recommendations].map(x=>x.id).filter(Boolean));
+    [...ids].forEach(id=>{
+      const option=document.createElement("option");
+      option.value=id; // Identificador interno; no se muestra en pantalla.
+      option.textContent=books.get(id)||[...predictions,...recommendations].find(x=>x.id===id)?.title||"Título no disponible en la API";
+      s.appendChild(option);
+    });
+    if([...s.options].some(o=>o.value===old))s.value=old;
+  }
+  function riskClass(r){if(r.includes("ALTO"))return"high";if(r.includes("MEDIO"))return"medium";if(r.includes("BAJO"))return"low";return"na";}
+  function renderRecommendations(){
+    const filter=$("riskFilter").value,body=$("recommendationRows");body.innerHTML="";
+    const rows=recommendations.filter(x=>filter==="ALL"||x.risk===filter);
+    rows.forEach(x=>{
+      const tr=document.createElement("tr");
+      const title=books.get(x.id)||x.title||"Título no disponible en la API";
+      const cells=[title,x.category,fmt(x.demand),fmt(x.stock),fmt(x.reserved),x.risk,fmt(x.reorder)];
+      cells.forEach((v,i)=>{
+        const td=document.createElement("td");
+        if(i===0){
+          td.textContent=v; // Nunca sustituir el título por el UUID.
+          if(v==="Título no disponible en la API") td.className="muted";
+        }else if(i===5){
+          const span=document.createElement("span");span.className=`risk ${riskClass(x.risk)}`;span.textContent=v;td.appendChild(span);
+        }else td.textContent=v??"—";
+        tr.appendChild(td);
+      });
+      body.appendChild(tr);
+    });
+    if(!rows.length)body.innerHTML='<tr><td colspan="7" class="empty">La API no devolvió recomendaciones para este filtro. Prueba “Todos los riesgos” o verifica /recommendations.</td></tr>';
+  }
+  function selectBook(){
+    const id=$("bookSelect").value;
+    if(!id){$("forecastEmpty").style.display="grid";$("forecastChart").style.display="none";$("forecastTotal").textContent="—";$("forecastRisk").textContent="—";if(forecastChart){forecastChart.destroy();forecastChart=null;}return;}
+    const p=predictions.find(x=>x.id===id)||recommendations.find(x=>x.id===id);
+    const raw=p?.raw||{};
+    const series=first(raw,["weekly_forecast","weekly_predictions","forecast_by_week","weekly_demand","forecast"],[]);
+    const arr=Array.isArray(series)?series:[];
+    const labels=arr.map((x,i)=>typeof x==="object"?first(x,["week","period","date","label"],`Semana ${i+1}`):`Semana ${i+1}`);
+    const vals=arr.map(x=>typeof x==="object"?num(first(x,["predicted_demand","demand","prediction","value","forecast"],0))||0:num(x)||0);
+    const total=num(first(raw,["forecast_demand_30_days","predicted_demand","demand_30d","estimated_demand","forecast_total","total_demand"],p?.demand));
+    $("forecastTotal").textContent=fmt(total);$("forecastRisk").textContent=first(raw,["risk_level","status","risk","riesgo"],p?.risk||"—");
+    if(forecastChart){forecastChart.destroy();forecastChart=null;}
+    if(arr.length){
+      $("forecastEmpty").style.display="none";$("forecastChart").style.display="block";
+      forecastChart=new Chart($("forecastChart"),{type:"line",data:{labels,datasets:[{data:vals,borderColor:"#68a7ff",backgroundColor:"#68a7ff22",fill:true,tension:.35,pointRadius:4,pointBackgroundColor:"#42d6a4"}]},options:chartOptions()});
+    }else{$("forecastChart").style.display="none";$("forecastEmpty").style.display="grid";$("forecastEmpty").textContent=(String(first(raw,["status"],"")).toUpperCase()==="DATOS_INSUFICIENTES"?"Este libro no tiene historial suficiente para generar un pronóstico confiable.":"La API no entregó una serie semanal para este libro. Demanda estimada: "+fmt(total)+".");}
+  }
+  function renderAnalytics(a){
+    analytics=a?.analytics??a;
+    const x=analytics||{};
+    $("kpiDemand").textContent=fmt(num(x.total_demand));
+    $("kpiBooks").textContent=fmt(num(x.books_analyzed));
+    $("kpiInsufficient").textContent=`${fmt(num(x.insufficient_activity_books))} con historial insuficiente`;
+    $("kpiPeriod").textContent=`${x.period_start||"—"} a ${x.period_end||"—"}`;
+    $("periodLabel").textContent=`Periodo de análisis · ${x.period_start||"—"} → ${x.period_end||"—"}`;
+    drawMonthly(x.monthly_demand||[]);drawCategories(x.demand_by_category||[]);
+    const synthetic=(x.data_type||a?.data_type||"").toLowerCase().includes("sintetico");
+    $("demoNotice").style.display=synthetic?"flex":"none";
+  }
+  function renderModel(m,metrics){
+    model=m?.model??m??{};
+    const statusMetrics=model.metrics??m?.metrics??metrics?.metrics??metrics??{};
+    const mlp=statusMetrics.mlp_regressor??{};
+    const baseline=statusMetrics.baseline_rolling_4_mean??{};
+    const mae=num(first(mlp,["mae"],first(statusMetrics,["mae","test_mae","mean_absolute_error"],null)));
+    const rmse=num(first(mlp,["rmse"],first(statusMetrics,["rmse","test_rmse","root_mean_squared_error"],null)));
+    const baselineMae=num(first(baseline,["mae"],first(statusMetrics,["baseline_mae","mae_baseline","baseline_error"],null)));
+    $("kpiMae").textContent=fmt(mae);
+    $("rmse").textContent=fmt(rmse);
+    $("baselineMae").textContent=fmt(baselineMae);
+    $("trainSamples").textContent=fmt(num(first(statusMetrics,["train_samples","n_train","training_size"],null)));
+    $("testSamples").textContent=fmt(num(first(statusMetrics,["test_samples","testing_samples","n_test","test_size"],null)));
+    $("modelType").textContent=String(first(model,["model_type","model_name","algorithm"],first(m,["model_type"],"MODELO"))).toUpperCase();
+    const trained=model.trained??m?.trained;
+    $("modelNote").textContent=trained===false
+      ?"El modelo todavía no está entrenado."
+      :first(statusMetrics,["conclusion","evaluation_message","comparison_message","status_message"],"Evaluación cronológica del modelo frente a una referencia de demanda.");
+  }
+  async function refresh(){
+    $("app").classList.add("loading");$("errorBox").style.display="none";
+    try{
+      const paths=["/health","/model/status","/predictions?limit=200","/recommendations?limit=200","/metrics","/analytics"];
+      const results=await Promise.allSettled(paths.map(get));
+      const byPath={};paths.forEach((p,i)=>{if(results[i].status==="fulfilled")byPath[p]=results[i].value;});
+      const failures=paths.filter((p,i)=>results[i].status==="rejected");
+      if(!byPath["/health"])throw new Error("No fue posible conectar con el servicio de LECTIO-AI.");
+      setStatus(true,"API conectada");
+      if(byPath["/analytics"])renderAnalytics(byPath["/analytics"]);
+      if(byPath["/model/status"]||byPath["/metrics"])renderModel(byPath["/model/status"]||{},byPath["/metrics"]||{});
+      predictions=listFrom(byPath["/predictions?limit=200"],["books","predictions","items","results"]).map(normalizePrediction);
+      recommendations=listFrom(byPath["/recommendations?limit=200"],["recommendations","items","results"]).map(normalizeRecommendation);
+      mergeNames();fillSelect();renderRecommendations();selectBook();
+      $("kpiRestock").textContent=fmt(recommendations.filter(x=>x.reorder>0).length);
+      if(failures.length){$("errorBox").style.display="block";$("errorBox").textContent="Algunos módulos no pudieron actualizarse: "+failures.join(", ")+". Los demás datos sí se cargaron.";}
+    }catch(e){setStatus(false,"Error de conexión");$("errorBox").style.display="block";$("errorBox").textContent=e.message+" Comprueba que la API esté disponible y vuelve a actualizar.";}
+    finally{$("app").classList.remove("loading");}
+  }
+  $("refreshBtn").addEventListener("click",refresh);
+  $("bookSelect").addEventListener("change",selectBook);
+  $("riskFilter").addEventListener("change",renderRecommendations);
+  refresh();
+})();
+</script>
+</body>
+</html>

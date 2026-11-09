@@ -45,6 +45,7 @@ def build_recommendations(
         recommendations.append(
             {
                 "book_id": forecast["book_id"],
+                "titulo": forecast.get("titulo", book.get("titulo")),
                 "category": forecast["category"],
                 "data_type": forecasts["data_type"],
                 "historical_demand": forecast["historical_demand"],

@@ -7,7 +7,13 @@ import pandas as pd
 from fastapi import HTTPException
 
 from app.api import routes
-from app.services.data_preparation import prepare_data
+from app.api.schemas import (
+    BookPrediction,
+    PredictionsResponse,
+    Recommendation,
+    RecommendationsResponse,
+)
+from app.services.data_preparation import FEATURE_COLUMNS, load_book_titles, prepare_data
 from app.services.exploratory_analysis import build_analytics
 from app.services.prediction import ModelNotTrainedError, forecast_all
 from app.services.recommendation import build_recommendations
@@ -18,18 +24,21 @@ def build_fixture():
     books = [
         {
             "book_id": "book-a",
+            "titulo": "Título real A",
             "category": "Historia",
             "stock": 5,
             "reserved": 2,
         },
         {
             "book_id": "book-b",
+            "titulo": "Título real B",
             "category": "Ciencia",
             "stock": 1,
             "reserved": 1,
         },
         {
             "book_id": "book-c",
+            "titulo": "Título real C",
             "category": "Arte",
             "stock": 3,
             "reserved": 0,
@@ -143,6 +152,40 @@ class DataPreparationTests(unittest.TestCase):
         self.assertNotIn("description", self.prepared.panel.columns)
         self.assertNotIn("username", self.prepared.panel.columns)
         self.assertNotIn("is_demo", self.prepared.catalog.columns)
+
+    def test_book_titles_are_preserved_in_catalog_without_becoming_features(self):
+        catalog = self.prepared.catalog.set_index("book_id")
+        self.assertEqual(catalog.loc["book-a", "titulo"], "Título real A")
+        self.assertEqual(catalog.loc["book-c", "titulo"], "Título real C")
+        self.assertNotIn("titulo", FEATURE_COLUMNS)
+
+    def test_live_book_title_loader_queries_the_title_column(self):
+        class Result:
+            def mappings(self):
+                return [{"book_id": "book-a", "titulo": "Título actual"}]
+
+        class SessionStub:
+            def execute(self, statement, params):
+                self.statement = statement
+                self.params = params
+                return Result()
+
+        session = SessionStub()
+        table_info = {
+            "libros_fisicos": {
+                "schema": "public",
+                "columns": [],
+            }
+        }
+        with patch(
+            "app.services.data_preparation._inspect_tables",
+            return_value=table_info,
+        ):
+            titles = load_book_titles(session, ["book-a"])
+
+        self.assertEqual(titles, {"book-a": "Título actual"})
+        self.assertIn('"titulo"', str(session.statement))
+        self.assertEqual(session.params, {"book_ids": ["book-a"]})
         self.assertNotIn("correo", self.prepared.events.columns)
         self.assertNotIn("reservation_id", self.prepared.events.columns)
 
@@ -169,6 +212,7 @@ class TrainingAndRecommendationTests(unittest.TestCase):
 
             forecasts = forecast_all(bundle)
             self.assertEqual(forecasts["horizon_days"], 30)
+            self.assertIn("titulo", forecasts["books"][0])
             self.assertTrue(
                 all(
                     week["predicted_demand"] >= 0
@@ -212,6 +256,7 @@ class TrainingAndRecommendationTests(unittest.TestCase):
         ]
         result = build_recommendations(forecasts, catalog)
         by_book = {item["book_id"]: item for item in result["recommendations"]}
+        self.assertIn("titulo", by_book["high"])
         self.assertEqual(by_book["high"]["risk_level"], "ALTO")
         self.assertEqual(by_book["high"]["recommended_replenishment"], 10)
         self.assertEqual(by_book["medium"]["risk_level"], "MEDIO")
@@ -233,6 +278,91 @@ class ApiFallbackTests(unittest.TestCase):
             with self.assertRaises(HTTPException) as raised:
                 routes.read_predictions()
             self.assertEqual(raised.exception.status_code, 503)
+
+
+class BookTitleApiTests(unittest.TestCase):
+    def setUp(self):
+        self.session = object()
+
+    def test_prediction_list_and_detail_include_live_neon_title(self):
+        forecast = {
+            "data_type": "datos_reales",
+            "horizon_days": 30,
+            "forecast_start": "2026-01-05",
+            "forecast_end_exclusive": "2026-02-04",
+            "books": [
+                {
+                    "book_id": "book-a",
+                    "titulo": None,
+                    "category": "Historia",
+                    "status": "PREDICCION_DISPONIBLE",
+                    "forecast_demand_30_days": 2.0,
+                    "weekly_forecast": [],
+                    "historical_demand": 8,
+                }
+            ],
+        }
+        with (
+            patch.object(routes, "_load_bundle", return_value={}),
+            patch.object(routes, "forecast_all", return_value=forecast),
+            patch.object(
+                routes,
+                "load_book_titles",
+                return_value={"book-a": "Título desde Neon"},
+            ) as load_titles,
+        ):
+            result = routes.read_predictions(limit=200, session=self.session)
+            detail = routes.read_book_prediction("book-a", session=self.session)
+
+        self.assertEqual(result["books"][0]["titulo"], "Título desde Neon")
+        self.assertEqual(result["books"][0]["book_id"], "book-a")
+        self.assertEqual(detail["titulo"], "Título desde Neon")
+        self.assertEqual(load_titles.call_count, 2)
+        PredictionsResponse.model_validate(result)
+        BookPrediction.model_validate(detail)
+
+    def test_recommendation_list_and_detail_include_live_neon_title(self):
+        recommendation = {
+            "book_id": "book-a",
+            "titulo": None,
+            "category": "Historia",
+            "data_type": "datos_reales",
+            "historical_demand": 8,
+            "forecast_demand_30_days": 2.0,
+            "stock_available": 1,
+            "reserved_units": 0,
+            "total_inventory": 1,
+            "risk_level": "ALTO",
+            "recommended_replenishment": 2,
+            "safety_margin": 0.2,
+            "formula": "test",
+        }
+        result_data = {
+            "data_type": "datos_reales",
+            "horizon_days": 30,
+            "safety_margin": 0.2,
+            "recommendations": [recommendation.copy()],
+        }
+        with (
+            patch.object(routes, "_recommendations", return_value=result_data),
+            patch.object(
+                routes,
+                "load_book_titles",
+                return_value={"book-a": "Título desde Neon"},
+            ) as load_titles,
+        ):
+            result = routes.read_recommendations(limit=200, session=self.session)
+            detail = routes.read_book_recommendation(
+                "book-a",
+                session=self.session,
+            )
+
+        self.assertEqual(result["recommendations"][0]["titulo"], "Título desde Neon")
+        self.assertEqual(result["recommendations"][0]["book_id"], "book-a")
+        self.assertEqual(detail["titulo"], "Título desde Neon")
+        self.assertEqual(load_titles.call_count, 2)
+        RecommendationsResponse.model_validate(result)
+        Recommendation.model_validate(detail)
 
 
 if __name__ == "__main__":

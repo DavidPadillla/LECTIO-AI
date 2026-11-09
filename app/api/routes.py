@@ -24,6 +24,7 @@ from app.api.schemas import (
 from app.database import get_database_diagnostics, get_db
 from app.database.diagnostics import DatabaseSchemaError
 from app.paths import DATA_DIR
+from app.services.data_preparation import load_book_titles
 from app.services.prediction import (
     ModelNotTrainedError,
     forecast_all,
@@ -62,6 +63,18 @@ def _load_report(name: str) -> dict[str, Any] | None:
     except FileNotFoundError:
         return None
     return _read_report(name, modified_ns)
+
+
+def _attach_current_titles(
+    items: list[dict[str, Any]],
+    session: Session,
+) -> None:
+    titles = load_book_titles(
+        session,
+        list(dict.fromkeys(item["book_id"] for item in items)),
+    )
+    for item in items:
+        item["titulo"] = titles.get(item["book_id"])
 
 
 @router.get("/", response_model=WelcomeResponse, tags=["general"])
@@ -144,9 +157,11 @@ def read_model_update_status(
 @router.get("/predictions", response_model=PredictionsResponse, tags=["predictions"])
 def read_predictions(
     limit: int = Query(default=200, ge=1, le=500),
+    session: Session = Depends(get_db),
 ) -> dict[str, Any]:
     result = forecast_all(_load_bundle())
     result["books"] = result["books"][:limit]
+    _attach_current_titles(result["books"], session)
     return result
 
 
@@ -155,10 +170,14 @@ def read_predictions(
     response_model=BookPrediction,
     tags=["predictions"],
 )
-def read_book_prediction(book_id: str) -> dict[str, Any]:
+def read_book_prediction(
+    book_id: str,
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
     result = forecast_all(_load_bundle())
     for prediction in result["books"]:
         if prediction["book_id"] == book_id:
+            _attach_current_titles([prediction], session)
             return prediction
     raise HTTPException(status_code=404, detail="No se encontró el libro.")
 
@@ -176,9 +195,11 @@ def _recommendations() -> dict[str, Any]:
 )
 def read_recommendations(
     limit: int = Query(default=200, ge=1, le=500),
+    session: Session = Depends(get_db),
 ) -> dict[str, Any]:
     result = _recommendations()
     result["recommendations"] = result["recommendations"][:limit]
+    _attach_current_titles(result["recommendations"], session)
     return result
 
 
@@ -187,10 +208,14 @@ def read_recommendations(
     response_model=Recommendation,
     tags=["recommendations"],
 )
-def read_book_recommendation(book_id: str) -> dict[str, Any]:
+def read_book_recommendation(
+    book_id: str,
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
     result = _recommendations()
     for recommendation in result["recommendations"]:
         if recommendation["book_id"] == book_id:
+            _attach_current_titles([recommendation], session)
             return recommendation
     raise HTTPException(status_code=404, detail="No se encontró el libro.")
 

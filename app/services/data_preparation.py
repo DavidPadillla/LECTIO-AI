@@ -5,7 +5,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from app.database.diagnostics import (
@@ -58,6 +58,7 @@ def load_source_data(session: Session) -> tuple[list[dict[str, Any]], list[dict[
         text(
             f"""
             SELECT {_quote_identifier('id')} AS book_id,
+                   {_quote_identifier('titulo')} AS titulo,
                    {_quote_identifier('categoria')} AS category,
                    {_quote_identifier('stock')} AS stock,
                    {_quote_identifier('reservado')} AS reserved
@@ -79,6 +80,29 @@ def load_source_data(session: Session) -> tuple[list[dict[str, Any]], list[dict[
     ).mappings()
 
     return [dict(row) for row in book_rows], [dict(row) for row in reservation_rows]
+
+
+def load_book_titles(session: Session, book_ids: list[str]) -> dict[str, str | None]:
+    if not book_ids:
+        return {}
+
+    tables = _inspect_tables(session)
+    books = _qualified_table(tables["libros_fisicos"], "libros_fisicos")
+    statement = text(
+        f"""
+        SELECT {_quote_identifier('id')} AS book_id,
+               {_quote_identifier('titulo')} AS titulo
+        FROM {books}
+        WHERE {_quote_identifier('id')} IN :book_ids
+        """
+    ).bindparams(bindparam("book_ids", expanding=True))
+    rows = session.execute(statement, {"book_ids": book_ids}).mappings()
+    return {
+        str(row["book_id"]): (
+            str(row["titulo"]) if row["titulo"] is not None else None
+        )
+        for row in rows
+    }
 
 
 def _week_start(values: pd.Series) -> pd.Series:
@@ -151,7 +175,7 @@ def prepare_data(
 ) -> PreparedData:
     books = pd.DataFrame(book_records)
     reservations = pd.DataFrame(reservation_records)
-    required_book_fields = {"book_id", "category", "stock", "reserved"}
+    required_book_fields = {"book_id", "titulo", "category", "stock", "reserved"}
     required_reservation_fields = {
         "reservation_id",
         "book_id",
@@ -167,6 +191,11 @@ def prepare_data(
     books["book_id"] = books["book_id"].astype("string").str.strip()
     books = books.dropna(subset=["book_id"])
     books = books.loc[books["book_id"].ne("")].copy()
+    books["titulo"] = books["titulo"].map(
+        lambda value: None
+        if pd.isna(value) or not str(value).strip()
+        else str(value).strip()
+    )
     books["category"] = books["category"].astype("string").str.strip()
     books["category"] = books["category"].replace("", pd.NA).fillna("SIN_CATEGORIA")
     books["stock"] = pd.to_numeric(books["stock"], errors="coerce")
@@ -233,7 +262,7 @@ def prepare_data(
         .reset_index()
     )
     all_books = books[
-        ["book_id", "category", "stock", "reserved"]
+        ["book_id", "titulo", "category", "stock", "reserved"]
     ].merge(
         activity, on="book_id", how="left", validate="one_to_one"
     )

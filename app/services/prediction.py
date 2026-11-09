@@ -142,6 +142,7 @@ def forecast_all(bundle: dict[str, Any], days: int = FORECAST_DAYS) -> dict[str,
             forecasts.append(
                 {
                     "book_id": book_id,
+                    "titulo": book.get("titulo"),
                     "category": str(book["category"]),
                     "status": "DATOS_INSUFICIENTES",
                     "forecast_demand_30_days": None,
@@ -183,6 +184,7 @@ def forecast_all(bundle: dict[str, Any], days: int = FORECAST_DAYS) -> dict[str,
         forecasts.append(
             {
                 "book_id": book_id,
+                "titulo": book.get("titulo"),
                 "category": str(book["category"]),
                 "status": "PREDICCION_DISPONIBLE",
                 "forecast_demand_30_days": round(total, 2),
