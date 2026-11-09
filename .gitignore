@@ -1,0 +1,61 @@
+# Virtual environments
+venv/
+.venv/
+
+# Python caches and test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local environment and editor files
+.env
+.env.*
+!.env.example
+.idea/
+.vscode/
+.aws/
+.ssh/
+
+# Credentials and private keys
+credentials*
+secrets*
+*.credentials
+*.secret
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+
+# Trained model artifacts
+*.joblib
+*.pkl
+*.pickle
+*.onnx
+*.model
+*.h5
+*.pt
+*.pth
+
+# Generated datasets, models, and reports
+data/processed/
+data/models/
+data/reports/
+data/state/
+data/.weekly-update-*/
+
+# Include the vetted seed model needed by a clean production deployment.
+!data/models/
+!data/models/demand_model.joblib
+
+# Temporary files and logs
+*.tmp
+*.temp
+*.log
+*.bak
+*.orig
+*.swp
+*.swo
