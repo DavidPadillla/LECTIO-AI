@@ -250,14 +250,28 @@ class WeeklyUpdateTests(unittest.TestCase):
         }
 
         def runner(output_root, **_):
-            return build_pipeline_result(output_root, metrics=poor_metrics)
+            result = build_pipeline_result(output_root, metrics=poor_metrics)
+            analytics_path = Path(output_root) / "reports" / "analytics.json"
+            analytics_path.write_text(
+                json.dumps({"data_type": "datos_reales", "period_end": "2026-11-23"}),
+                encoding="utf-8",
+            )
+            return result
 
         updater = self.make_updater(runner)
+        reports = self.data_dir / "reports"
+        reports.mkdir(parents=True)
+        (reports / "analytics.json").write_text(
+            json.dumps({"data_type": "datos_reales", "period_end": "2026-11-09"}),
+            encoding="utf-8",
+        )
         with patch("app.services.weekly_update.get_model_bundle", return_value=self.old_bundle):
             result = updater.run_update()
         self.assertEqual(result["status"], "MODELO_ANTERIOR_CONSERVADO")
         self.assertTrue(result["previous_model_preserved"])
         self.assertEqual(self.model_file.read_bytes(), b"previous-valid-model")
+        analytics = json.loads((reports / "analytics.json").read_text(encoding="utf-8"))
+        self.assertEqual(analytics["period_end"], "2026-11-23")
         self.assertIn("baseline", result["reason"])
 
     def test_busy_update_lock_prevents_overlapping_run(self):

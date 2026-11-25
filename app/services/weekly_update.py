@@ -369,6 +369,10 @@ class WeeklyModelUpdater:
             )
             record["comparison"] = comparison
             if not accepted:
+                staged_analytics = staging_dir / "reports" / "analytics.json"
+                if staged_analytics.is_file():
+                    current_analytics = self.data_dir / "reports" / "analytics.json"
+                    self._atomic_promote(staged_analytics, current_analytics)
                 record["status"] = (
                     "MODELO_ANTERIOR_CONSERVADO"
                     if had_valid_model
