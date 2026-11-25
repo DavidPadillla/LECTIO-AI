@@ -78,12 +78,18 @@ class WeeklyPrediction(BaseModel):
     predicted_demand: float
 
 
+class WeeklyHistory(BaseModel):
+    period_start: str
+    demand: float
+
+
 class BookPrediction(BaseModel):
     book_id: str
     titulo: str | None
     category: str
     status: Literal["PREDICCION_DISPONIBLE", "DATOS_INSUFICIENTES"]
     forecast_demand_30_days: float | None
+    weekly_history: list[WeeklyHistory]
     weekly_forecast: list[WeeklyPrediction]
     historical_demand: int
 

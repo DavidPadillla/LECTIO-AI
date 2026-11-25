@@ -138,6 +138,16 @@ def forecast_all(bundle: dict[str, Any], days: int = FORECAST_DAYS) -> dict[str,
     forecasts = []
     for book in books.to_dict(orient="records"):
         book_id = str(book["book_id"])
+        book_history = history.loc[history["book_id"].astype(str) == book_id].sort_values(
+            "period_start"
+        )
+        weekly_history = [
+            {
+                "period_start": pd.Timestamp(row.period_start).date().isoformat(),
+                "demand": float(row.demand),
+            }
+            for row in book_history.tail(5).itertuples(index=False)
+        ]
         if not bool(book["sufficient_history"]):
             forecasts.append(
                 {
@@ -146,15 +156,13 @@ def forecast_all(bundle: dict[str, Any], days: int = FORECAST_DAYS) -> dict[str,
                     "category": str(book["category"]),
                     "status": "DATOS_INSUFICIENTES",
                     "forecast_demand_30_days": None,
+                    "weekly_history": weekly_history,
                     "weekly_forecast": [],
                     "historical_demand": int(book["total_reservations"]),
                 }
             )
             continue
 
-        book_history = history.loc[history["book_id"].astype(str) == book_id].sort_values(
-            "period_start"
-        )
         demand_history = book_history["demand"].astype(float).tolist()
         predictions = []
         total = 0.0
@@ -188,6 +196,7 @@ def forecast_all(bundle: dict[str, Any], days: int = FORECAST_DAYS) -> dict[str,
                 "category": str(book["category"]),
                 "status": "PREDICCION_DISPONIBLE",
                 "forecast_demand_30_days": round(total, 2),
+                "weekly_history": weekly_history,
                 "weekly_forecast": predictions,
                 "historical_demand": int(book["total_reservations"]),
             }

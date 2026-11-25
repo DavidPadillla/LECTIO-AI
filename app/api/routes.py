@@ -24,7 +24,7 @@ from app.api.schemas import (
 from app.database import get_database_diagnostics, get_db
 from app.database.diagnostics import DatabaseSchemaError
 from app.paths import DATA_DIR
-from app.services.data_preparation import load_book_titles
+from app.services.data_preparation import load_book_titles, load_recent_weekly_history
 from app.services.prediction import (
     ModelNotTrainedError,
     forecast_all,
@@ -75,6 +75,16 @@ def _attach_current_titles(
     )
     for item in items:
         item["titulo"] = titles.get(item["book_id"])
+
+
+def _attach_live_weekly_history(
+    items: list[dict[str, Any]], session: Session
+) -> None:
+    weekly = load_recent_weekly_history(
+        session, [item["book_id"] for item in items], weeks=5
+    )
+    for item in items:
+        item["weekly_history"] = weekly.get(item["book_id"], [])
 
 
 @router.get("/", response_model=WelcomeResponse, tags=["general"])
@@ -154,6 +164,32 @@ def read_model_update_status(
     return updater.get_status()
 
 
+@router.post("/model/update", status_code=202, tags=["model"])
+def start_manual_model_update(request: Request) -> dict[str, Any]:
+    jobs = getattr(request.app.state, "manual_update_jobs", None)
+    if jobs is None:
+        raise HTTPException(
+            status_code=503,
+            detail="El servicio de actualización manual no está disponible.",
+        )
+    try:
+        return jobs.start()
+    except RuntimeError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from None
+
+
+@router.get("/model/update/{job_id}", tags=["model"])
+def read_manual_model_update(
+    job_id: str,
+    request: Request,
+) -> dict[str, Any]:
+    jobs = getattr(request.app.state, "manual_update_jobs", None)
+    job = jobs.get(job_id) if jobs is not None else None
+    if job is None:
+        raise HTTPException(status_code=404, detail="No se encontró esa actualización.")
+    return job
+
+
 @router.get("/predictions", response_model=PredictionsResponse, tags=["predictions"])
 def read_predictions(
     limit: int = Query(default=200, ge=1, le=500),
@@ -161,6 +197,7 @@ def read_predictions(
 ) -> dict[str, Any]:
     result = forecast_all(_load_bundle())
     result["books"] = result["books"][:limit]
+    _attach_live_weekly_history(result["books"], session)
     _attach_current_titles(result["books"], session)
     return result
 
@@ -177,6 +214,7 @@ def read_book_prediction(
     result = forecast_all(_load_bundle())
     for prediction in result["books"]:
         if prediction["book_id"] == book_id:
+            _attach_live_weekly_history([prediction], session)
             _attach_current_titles([prediction], session)
             return prediction
     raise HTTPException(status_code=404, detail="No se encontró el libro.")

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -102,6 +104,54 @@ def load_book_titles(session: Session, book_ids: list[str]) -> dict[str, str | N
             str(row["titulo"]) if row["titulo"] is not None else None
         )
         for row in rows
+    }
+
+
+def load_recent_weekly_history(
+    session: Session, book_ids: list[str], weeks: int = 5
+) -> dict[str, list[dict[str, Any]]]:
+    """Load live reservation counts for the current and previous weeks."""
+    unique_ids = list(dict.fromkeys(str(book_id) for book_id in book_ids if book_id))
+    if not unique_ids or weeks < 1:
+        return {}
+
+    today = datetime.now(ZoneInfo("America/Bogota")).date()
+    current_week = today - timedelta(days=today.weekday())
+    first_week = current_week - timedelta(weeks=weeks - 1)
+    tomorrow = today + timedelta(days=1)
+    tables = _inspect_tables(session)
+    reservations = _qualified_table(tables["reservas"], "reservas")
+    statement = text(
+        f"""
+        SELECT r.{_quote_identifier('libro_fisico_id')} AS book_id,
+               date_trunc('week', r.{_quote_identifier('fecha_creacion')})::date AS period_start,
+               count(DISTINCT r.{_quote_identifier('id')}) AS demand
+        FROM {reservations} AS r
+        WHERE r.{_quote_identifier('libro_fisico_id')} IN :book_ids
+          AND upper(trim(r.{_quote_identifier('estado')})) IN ('ACTIVA', 'DEVUELTA')
+          AND r.{_quote_identifier('fecha_creacion')} >= :first_week
+          AND r.{_quote_identifier('fecha_creacion')} < :tomorrow
+        GROUP BY r.{_quote_identifier('libro_fisico_id')}, period_start
+        """
+    ).bindparams(bindparam("book_ids", expanding=True))
+    rows = session.execute(
+        statement,
+        {"book_ids": unique_ids, "first_week": first_week, "tomorrow": tomorrow},
+    ).mappings()
+    counts = {
+        (str(row["book_id"]), row["period_start"].isoformat()): int(row["demand"])
+        for row in rows
+    }
+    periods = [first_week + timedelta(weeks=offset) for offset in range(weeks)]
+    return {
+        book_id: [
+            {
+                "period_start": period.isoformat(),
+                "demand": counts.get((book_id, period.isoformat()), 0),
+            }
+            for period in periods
+        ]
+        for book_id in unique_ids
     }
 
 

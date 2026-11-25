@@ -296,7 +296,17 @@ class WeeklyModelUpdater:
             "reason": None,
         }
 
-    def run_update(self) -> dict[str, Any]:
+    def run_update(
+        self,
+        progress_callback: Callable[[str, str], None] | None = None,
+    ) -> dict[str, Any]:
+        def report_progress(stage: str, message: str) -> None:
+            if progress_callback is not None:
+                try:
+                    progress_callback(stage, message)
+                except Exception:
+                    logger.warning("Model update progress callback failed.")
+
         if not self._update_lock.acquire():
             return {
                 "status": "MODELO_ANTERIOR_CONSERVADO",
@@ -317,10 +327,21 @@ class WeeklyModelUpdater:
             staging_dir = Path(
                 tempfile.mkdtemp(prefix=".weekly-update-", dir=self.data_dir)
             )
-            result = self.pipeline_runner(
-                output_root=staging_dir,
-                incumbent_bundle=incumbent_bundle,
-            )
+            if self.pipeline_runner is run_pipeline:
+                result = self.pipeline_runner(
+                    output_root=staging_dir,
+                    incumbent_bundle=incumbent_bundle,
+                    progress_callback=report_progress,
+                )
+            else:
+                report_progress(
+                    "entrenando",
+                    "Consultando la base de datos y entrenando el modelo candidato.",
+                )
+                result = self.pipeline_runner(
+                    output_root=staging_dir,
+                    incumbent_bundle=incumbent_bundle,
+                )
             preparation = result["preparation"]
             evaluation = result["evaluation"]
             record.update(
@@ -337,6 +358,14 @@ class WeeklyModelUpdater:
             accepted, rejection_reason, comparison = self._acceptance(
                 evaluation,
                 self.config,
+            )
+            report_progress(
+                "publicando" if accepted else "evaluacion_finalizada",
+                (
+                    "El candidato aprobó la evaluación; publicando los resultados."
+                    if accepted
+                    else "La evaluación terminó; se conservará el modelo anterior."
+                ),
             )
             record["comparison"] = comparison
             if not accepted:

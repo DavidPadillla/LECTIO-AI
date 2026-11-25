@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -19,7 +19,13 @@ from app.services.training import train_and_save
 def run_pipeline(
     output_root: Path = DATA_DIR,
     incumbent_bundle: dict[str, Any] | None = None,
+    progress_callback: Callable[[str, str], None] | None = None,
 ) -> dict:
+    def report_progress(stage: str, message: str) -> None:
+        if progress_callback is not None:
+            progress_callback(stage, message)
+
+    report_progress("consultando", "Consultando los libros y reservas de la base de datos.")
     engine = get_engine()
     try:
         with Session(engine) as session:
@@ -33,7 +39,9 @@ def run_pipeline(
         engine.dispose()
         get_engine.cache_clear()
 
+    report_progress("preparando", "Preparando y validando los datos encontrados.")
     prepared = prepare_data(book_records, reservation_records)
+    report_progress("entrenando", "Entrenando y evaluando el modelo candidato.")
     analytics = save_reports(
         prepared.panel,
         prepared.catalog,
@@ -47,6 +55,7 @@ def run_pipeline(
         output_root / "reports",
         incumbent_bundle=incumbent_bundle,
     )
+    report_progress("evaluando", "Comprobando el candidato frente al modelo actual.")
     return {
         "data_type": bundle["data_type"],
         "preparation": prepared.report,
