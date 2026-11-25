@@ -28,9 +28,16 @@ NUMERIC_FEATURES = [
 MODEL_FILENAME = "demand_model.joblib"
 MIN_TRAIN_PERIODS = 8
 TEST_FRACTION = 0.2
+MODEL_CANDIDATES = (
+    {"hidden_layer_sizes": (8,), "alpha": 0.1},
+    {"hidden_layer_sizes": (16,), "alpha": 0.1},
+    {"hidden_layer_sizes": (16,), "alpha": 1.0},
+    {"hidden_layer_sizes": (32,), "alpha": 1.0},
+)
 
 
-def build_model() -> Pipeline:
+def build_model(config: dict[str, Any] | None = None) -> Pipeline:
+    selected = config or MODEL_CANDIDATES[2]
     preprocessing = ColumnTransformer(
         transformers=[
             ("categories", OneHotEncoder(handle_unknown="ignore"), CATEGORICAL_FEATURES),
@@ -39,10 +46,10 @@ def build_model() -> Pipeline:
         remainder="drop",
     )
     estimator = MLPRegressor(
-        hidden_layer_sizes=(16,),
+        hidden_layer_sizes=selected["hidden_layer_sizes"],
         activation="relu",
         solver="adam",
-        alpha=1.0,
+        alpha=selected["alpha"],
         learning_rate_init=0.001,
         max_iter=1000,
         early_stopping=False,
@@ -50,6 +57,53 @@ def build_model() -> Pipeline:
         tol=1e-3,
     )
     return Pipeline([("preprocessing", preprocessing), ("model", estimator)])
+
+
+def _select_model_config(train: pd.DataFrame) -> dict[str, Any]:
+    """Select MLP settings using expanding chronological validation folds."""
+    periods = np.sort(train["period_start"].unique())
+    fold_count = min(3, max(1, (len(periods) - MIN_TRAIN_PERIODS) // 3))
+    validation_size = max(1, (len(periods) - MIN_TRAIN_PERIODS) // (fold_count + 1))
+    fold_starts = [
+        len(periods) - validation_size * (fold_count - index)
+        for index in range(fold_count)
+    ]
+    folds = [
+        (set(periods[:start]), set(periods[start : start + validation_size]))
+        for start in fold_starts
+        if start >= MIN_TRAIN_PERIODS
+    ]
+    if not folds:
+        return {**MODEL_CANDIDATES[2], "validation_mae": None,
+                "validation_rmse": None, "validation_folds": 0}
+
+    scores = []
+    for config in MODEL_CANDIDATES:
+        actual_parts = []
+        predicted_parts = []
+        for train_periods, validation_periods in folds:
+            fold_train = train.loc[train["period_start"].isin(train_periods)]
+            fold_validation = train.loc[
+                train["period_start"].isin(validation_periods)
+            ]
+            evaluator = build_model(config)
+            evaluator.fit(fold_train[list(FEATURE_COLUMNS)], fold_train["target"])
+            actual_parts.append(fold_validation["target"].to_numpy(dtype=float))
+            predicted_parts.append(
+                evaluator.predict(fold_validation[list(FEATURE_COLUMNS)])
+            )
+        actual = np.concatenate(actual_parts)
+        predicted = np.concatenate(predicted_parts)
+        metrics = _metrics(actual, predicted)
+        scores.append((metrics["mae"] + metrics["rmse"], dict(config), metrics))
+
+    _, selected, metrics = min(scores, key=lambda item: item[0])
+    return {
+        **selected,
+        "validation_mae": metrics["mae"],
+        "validation_rmse": metrics["rmse"],
+        "validation_folds": len(folds),
+    }
 
 
 def _metrics(actual: np.ndarray, predicted: np.ndarray) -> dict[str, float]:
@@ -77,7 +131,12 @@ def _evaluate(
             "La división cronológica no deja suficientes periodos de entrenamiento y prueba."
         )
 
-    evaluator = build_model()
+    selected_config = _select_model_config(train)
+    model_config = {
+        "hidden_layer_sizes": selected_config["hidden_layer_sizes"],
+        "alpha": selected_config["alpha"],
+    }
+    evaluator = build_model(model_config)
     evaluator.fit(train[list(FEATURE_COLUMNS)], train["target"])
     mlp_raw = evaluator.predict(test[list(FEATURE_COLUMNS)])
     baseline_raw = test["rolling_4_mean"].to_numpy(dtype=float)
@@ -146,6 +205,13 @@ def _evaluate(
         "baseline_rolling_4_mean": baseline_metrics,
         "incumbent_model": incumbent_metrics,
         "mlp_raw_negative_predictions": int((mlp_raw < 0).sum()),
+        "selected_model_config": {
+            "hidden_layer_sizes": list(model_config["hidden_layer_sizes"]),
+            "alpha": model_config["alpha"],
+            "validation_mae": selected_config["validation_mae"],
+            "validation_rmse": selected_config["validation_rmse"],
+            "validation_folds": selected_config["validation_folds"],
+        },
         "mlp_better_than_baseline_mae": mlp_better_mae,
         "mlp_better_than_baseline_rmse": mlp_better_rmse,
         "low_demand_evaluation": low_demand_metrics,
@@ -171,7 +237,13 @@ def train_and_save(
         incumbent_bundle.get("pipeline") if incumbent_bundle is not None else None
     )
     evaluation = _evaluate(prepared.features, incumbent_pipeline)
-    final_model = build_model()
+    selected_config = evaluation["selected_model_config"]
+    final_model = build_model(
+        {
+            "hidden_layer_sizes": tuple(selected_config["hidden_layer_sizes"]),
+            "alpha": selected_config["alpha"],
+        }
+    )
     final_model.fit(
         prepared.features[list(FEATURE_COLUMNS)],
         prepared.features["target"],
@@ -189,9 +261,9 @@ def train_and_save(
         "preparation": prepared.report,
         "model_config": {
             "type": "MLPRegressor",
-            "hidden_layer_sizes": [16],
+            "hidden_layer_sizes": selected_config["hidden_layer_sizes"],
             "activation": "relu",
-            "alpha": 1.0,
+            "alpha": selected_config["alpha"],
             "max_iter": 1000,
             "early_stopping": False,
             "random_state": 42,

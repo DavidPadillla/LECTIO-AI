@@ -310,6 +310,7 @@ class BookTitleApiTests(unittest.TestCase):
                 "load_book_titles",
                 return_value={"book-a": "Título desde Neon"},
             ) as load_titles,
+            patch.object(routes, "load_recent_weekly_history", return_value={"book-a": []}),
         ):
             result = routes.read_predictions(limit=200, session=self.session)
             detail = routes.read_book_prediction("book-a", session=self.session)
